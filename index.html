@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f13"><meta name="description" content="精密な3D PCを修理して、自分だけの工房を育てるスマホ向け修理経営シミュレーター。">
+<title>RIG REPAIR — PC修理工房</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="css/precision.css"><link rel="stylesheet" href="css/detail.css">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script>
+</head>
+<body>
+<header class="topbar">
+<a href="./" class="brand" aria-label="RIG REPAIR ホーム"><span class="brand-symbol" data-icon="chip"></span><span>RIG<span class="brand-light">REPAIR</span><small>PC REPAIR SIMULATOR</small></span></a>
+<div class="shop-status"><span class="live-dot"></span> AKIBA GARAGE <span class="status-slash">/</span> <span id="level-label">駆け出しの工房</span></div>
+<div class="header-actions"><span class="save-status" id="save-status">LOCAL SAVE <span class="live-dot"></span></span><button class="icon-button" id="help-button" aria-label="遊び方" data-icon="help"></button><button class="icon-button" id="settings-button" aria-label="設定" data-icon="settings"></button></div>
+</header>
+<main class="app-shell">
+<section class="command-bar" aria-label="工房の状況">
+<div class="day-block"><span class="eyebrow">WORKSHOP / OPEN</span><h1>あなたの腕で、<span>もう一度。</span></h1><p><span id="day-label">DAY 01</span><span class="tiny-divider"></span><span id="clock-label">09:00</span><span class="open-badge">営業中</span></p></div>
+<div class="economy-bar"><div class="stat balance-stat"><span data-icon="wallet"></span><div><span class="stat-label">所持金</span><strong id="balance-label">¥32,000</strong></div></div><div class="stat"><span data-icon="star"></span><div><span class="stat-label">評判</span><strong><span id="rep-label">4.2</span><small> / 5.0</small></strong></div></div><div class="stat repaired-stat"><span data-icon="check-circle"></span><div><span class="stat-label">修理完了</span><strong id="completed-label">0<small> 台</small></strong></div></div><button class="end-day-button" id="end-day-button"><span data-icon="moon"></span><span>営業を終える</span><span data-icon="arrow-right"></span></button></div>
+</section>
+<div class="workspace-grid">
+<section class="workbench-panel" id="workbench-panel" aria-label="3D修理ワークベンチ">
+<div class="workbench-top"><div class="bench-tab"><span class="live-dot"></span> WORKBENCH <span class="bench-number">01</span></div><div class="render-badge"><span>MICRO DETAIL</span><i></i> ULTRA+</div></div>
+<div class="stage" id="stage"><div id="scene-container" aria-label="PCの3Dモデル。ドラッグで回転、ピンチで拡大。パーツをタップで選択。"></div>
+<div class="stage-heading"><span class="eyebrow" id="pc-serial">CUSTOM BUILD / ATX</span><h2 id="pc-name">NEBULA <span>G7</span></h2><div class="machine-status" id="machine-status"><span class="warning-dot"></span> 修理待ち <span>•</span> 電源 OFF</div></div>
+<div class="stage-controls"><button class="scene-control" id="view-side" aria-label="内部を正面から見る" data-icon="chip"></button><button class="scene-control" id="view-front" aria-label="フロントを見る" data-icon="monitor"></button><button class="scene-control" id="view-reset" aria-label="カメラを戻す" data-icon="rotate"></button></div>
+<div class="macro-hud" id="macro-hud" hidden><button data-macro-step="-1" aria-label="前のパーツ">‹</button><span id="macro-part-label">CPU / MACRO</span><button data-macro-step="1" aria-label="次のパーツ">›</button></div><div class="thermal-legend" id="thermal-legend" hidden><span>THERMAL MAP / 模式表示</span><i></i><small>30°C <b>未診断はグレー</b> 100°C</small></div>
+<div class="scene-loading" id="scene-loading"><span class="loader"></span><strong>ワークベンチを準備中</strong><small>3Dパーツを組み立てています</small></div>
+<div class="part-tooltip" id="part-tooltip" hidden><span class="live-dot"></span><span id="part-tooltip-text">CPU</span><small>TAP TO INSPECT</small></div>
+<div class="stage-bottom"><div class="drag-hint"><span data-icon="hand"></span><span>ドラッグで回転 <b>·</b> ピンチでズーム</span></div><button id="labels-button" class="labels-button" aria-pressed="true"><span data-icon="layers"></span> パーツガイド <span class="toggle-dot"></span></button></div>
+<div class="scene-tag" id="scene-tag">01 — PRECISION IS EVERYTHING.</div></div>
+<div class="inspection-toolbar" aria-label="精密観察ツール"><button data-inspection="macro" aria-pressed="false"><span data-icon="scan"></span>接写</button><button data-inspection="exploded" aria-pressed="false"><span data-icon="layers"></span>分解図</button><button data-inspection="thermal" aria-pressed="false"><span data-icon="drop"></span>温度</button><button data-inspection="light" aria-pressed="false"><span data-icon="power"></span>検査灯</button><button data-inspection="rgb"><i class="rgb-swatch"></i><span id="rgb-mode-label">ICE</span></button></div><p class="inspection-caption" id="inspection-caption">部品の裏側まで、あなたの目で。</p>
+<div class="component-strip" id="component-strip" aria-label="パーツを選択"></div>
+<div class="tool-dock"><div class="tool-dock-label"><span class="eyebrow">YOUR TOOLKIT</span><span>作業ツール</span></div><div class="tool-buttons"><button id="tool-inspect" class="tool-button"><span class="tool-icon" data-icon="scan"></span><span>診断</span><small>01</small></button><button id="tool-panel" class="tool-button"><span class="tool-icon" data-icon="panel"></span><span id="panel-tool-label">パネルを外す</span><small>02</small></button><button id="tool-repair" class="tool-button"><span class="tool-icon" data-icon="wrench"></span><span>修理・交換</span><small>03</small></button><button id="tool-test" class="tool-button"><span class="tool-icon" data-icon="power"></span><span>起動テスト</span><small>04</small></button><button id="tool-clean" class="tool-button"><span class="tool-icon" data-icon="wind"></span><span>クリーニング</span><small>05</small></button></div></div>
+</section>
+<aside class="job-panel" id="job-panel"><div class="panel-heading"><span><span data-icon="clipboard"></span> 現在の修理依頼</span><span class="outline-badge">IN PROGRESS</span></div><div id="active-job-content"></div></aside>
+</div>
+<section class="lower-grid"><article class="shop-summary"><div class="section-title"><span class="eyebrow">THE NEXT LEVEL</span><span id="xp-label">0 / 3 件</span></div><div class="level-line"><span class="level-icon" data-icon="shop"></span><div><h3 id="shop-level-title">小さな工房、大きな可能性。</h3><p id="shop-level-copy">修理を3件完了して、次のランクへ。</p></div><span class="level-value" id="shop-level-number">LV.01</span></div><div class="progress-track"><span id="xp-progress"></span></div></article><article class="next-job-card"><div class="next-job-icon" data-icon="inbox"></div><div><span class="eyebrow">YOUR NEXT OPPORTUNITY</span><h3>次の「困った」が、待っている。</h3><p><span id="available-count">3</span> 件の依頼が届いています</p></div><button id="open-contracts-button" class="text-button">依頼を見る <span data-icon="arrow-right"></span></button></article></section>
+</main>
+<nav class="bottom-nav" aria-label="メインナビゲーション"><button class="nav-item active" data-nav="workbench"><span data-icon="wrench"></span><span>ワークベンチ</span><i></i></button><button class="nav-item" data-nav="contracts"><span data-icon="clipboard"></span><span>修理依頼</span><span class="nav-count" id="nav-count">3</span></button><button class="nav-item" data-nav="store"><span data-icon="cart"></span><span>パーツショップ</span></button><button class="nav-item" data-nav="inventory"><span data-icon="box"></span><span>在庫</span></button><button class="nav-item" data-nav="business"><span data-icon="chart"></span><span>経営</span></button><div class="nav-footer"><span class="live-dot"></span> MICRO DETAIL EDITION <small>v1.1</small></div></nav>
+<div id="toast-region" aria-live="polite"></div>
+<div class="modal-backdrop" id="modal-backdrop" hidden><section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-heading"><div><span class="eyebrow" id="modal-eyebrow">WORKSHOP</span><h2 id="modal-title">タイトル</h2></div><button class="icon-button" id="modal-close" aria-label="閉じる" data-icon="close"></button></div><div id="modal-content"></div></section></div>
+<script src="js/engine.js" defer></script><script src="js/microbench.js" defer></script><script src="js/game.js" defer></script><script type="module" src="js/scene.js"></script>
+</body></html>
