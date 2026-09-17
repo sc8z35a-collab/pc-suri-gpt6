@@ -79,6 +79,34 @@
     test('3D: more than 6000 additional physical micro-details are loaded',()=>{assert(Number(d.getElementById('scene-container').dataset.microInstances)>6000);});
     test('3D: macro mode and part navigation do not spend game resources',()=>{click('#modal-close');const before=JSON.stringify(g.state);click('[data-inspection="macro"]');eq(d.getElementById('macro-hud').hidden,false);click('[data-macro-step="1"]');eq(JSON.stringify(g.state),before);});
     test('3D: exploded view, thermal overlay, inspection lamp and RGB work',()=>{const before=JSON.stringify(g.state);for(const mode of ['exploded','thermal','light']){click(`[data-inspection="${mode}"]`);eq(d.querySelector(`[data-inspection="${mode}"]`).getAttribute('aria-pressed'),'true');}eq(d.getElementById('thermal-legend').hidden,false);click('[data-inspection="rgb"]');eq(d.getElementById('rgb-mode-label').textContent,'SPECTRUM');eq(JSON.stringify(g.state),before);});
+    const stage=d.getElementById('scene-container'),atlas=d.getElementById('atlas-select');
+    const chooseAtlas=key=>{atlas.value=key;atlas.dispatchEvent(new w.Event('change',{bubbles:true}));};
+    test('3D: ten detail views and more than 9000 instanced details exist',()=>{eq(atlas.options.length,11);assert(Number(stage.dataset.microInstances)>9000);});
+    test('3D: every atlas view is selectable without changing game state',()=>{
+      const before=JSON.stringify(g.state);
+      for(const key of ['io','power','pump','routing','headers','radiator','gpu','ssd','memory','chassis']){chooseAtlas(key);eq(stage.dataset.atlas,key);assert(!d.getElementById('atlas-info').hidden);}
+      eq(JSON.stringify(g.state),before);
+    });
+    test('3D: SSD view exposes four material layers and isolates context',()=>{
+      click('#atlas-reset');chooseAtlas('ssd');eq(stage.dataset.cutaway,'true');eq(stage.dataset.isolated,'true');eq(d.querySelectorAll('#layer-legend span').length,4);eq(d.getElementById('layer-spread').disabled,false);
+    });
+    test('3D: layer slider updates output without spending resources',()=>{
+      const before=JSON.stringify(g.state),slider=d.getElementById('layer-spread');slider.value='100';slider.dispatchEvent(new w.Event('input',{bubbles:true}));
+      eq(stage.dataset.layerSpread,'1');eq(d.getElementById('layer-value').value,'100%');eq(JSON.stringify(g.state),before);eq(stage.dataset.layerSettled,'false');
+    });
+    await waitFor(()=>stage.dataset.layerSettled==='true',90000);
+    test('3D: physical layer animation settles at its requested value',()=>{eq(stage.dataset.layerSettled,'true');});
+    test('3D: isolation is reversible without touching game state',()=>{const before=JSON.stringify(g.state);click('#isolate-button');eq(stage.dataset.isolated,'false');click('#isolate-button');eq(stage.dataset.isolated,'true');eq(JSON.stringify(g.state),before);});
+    test('3D: atlas arrows reach memory and case then wrap around',()=>{chooseAtlas('ssd');click('[data-macro-step="1"]');eq(atlas.value,'memory');click('[data-macro-step="1"]');eq(atlas.value,'chassis');click('[data-macro-step="1"]');eq(atlas.value,'io');});
+    test('3D: reset clears cutaway, isolation, macro and explosion',()=>{
+      chooseAtlas('memory');click('#atlas-reset');eq(atlas.value,'');eq(stage.dataset.isolated,'false');eq(stage.dataset.cutaway,'false');eq(d.getElementById('macro-hud').hidden,true);
+      eq(d.getElementById('layer-spread').disabled,true);eq(d.getElementById('isolate-button').disabled,true);
+      for(const name of ['exploded','thermal'])eq(d.querySelector(`[data-inspection="${name}"]`).getAttribute('aria-pressed'),'false');
+    });
+    test('3D: empty bench disables controls and next job restores them',()=>{
+      const job=g.state.active;g.state.active=null;w.dispatchEvent(new w.Event('rig-state'));eq(atlas.disabled,true);eq(d.getElementById('layer-spread').disabled,true);
+      g.state.active=job;w.dispatchEvent(new w.Event('rig-state'));eq(atlas.disabled,false);chooseAtlas('pump');eq(atlas.value,'pump');click('#atlas-reset');
+    });
   } catch(e) { failed++; console.error('FAIL UI sequence: '+e.message);results.textContent+='FAIL UI sequence: '+e.message+'\n'; }
   const summary=document.getElementById('summary');summary.textContent=`${passed} passed / ${failed} failed`;summary.className=failed?'fail':'pass';summary.dataset.complete='true';summary.dataset.failed=failed;
   console.info(`TEST SUMMARY: ${passed} passed / ${failed} failed`);
