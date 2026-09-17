@@ -85,22 +85,23 @@ function startScene() {
   function component(key){const group=new THREE.Group();group.userData.part=key;parts[key]=group;pc.add(group);return group;}
   function addTarget(parent,key,w,h,d,x,y,z) { const hit = box(parent,w,h,d,x,y,z,new THREE.MeshBasicMaterial({visible:false})); hit.userData.part=key;pickables.push(hit);return hit; }
   // Structural anodized-aluminium chassis, feet and rear steel tray.
-  box(pc,3.38,.13,1.86,0,.17,0); box(pc,3.38,.10,1.86,0,4.22,0);
+  const roofSkin=new THREE.Group();pc.add(roofSkin);
+  box(pc,3.38,.13,1.86,0,.17,0); box(roofSkin,3.38,.10,1.86,0,4.22,0);
   box(pc,3.3,4.02,.065,0,2.19,-.9,mat(0x202b32,.8,.44));
   for(const x of [-1.66,1.66])for(const z of [-.88,.88])box(pc,.09,4.12,.09,x,2.18,z,edge);
   for(const y of [.31,4.13])box(pc,3.2,.045,.055,0,y,.93,edge);
   for(const x of [-1.28,1.28])for(const z of [-.61,.61]) { box(pc,.45,.15,.32,x,.045,z,rubber); box(pc,.34,.09,.25,x,-.03,z,dark); }
   // Ventilated roof: inset mesh, long stamped ribs and front I/O.
-  box(pc,2.76,.028,1.44,-.1,4.284,0,dark);
-  for(let i=0;i<49;i++) box(pc,.018,.02,1.32,-1.37+i*.052,4.305,-.025,edge);
-  for(let j=0;j<12;j++) box(pc,2.65,.007,.008,-.1,4.319,-.65+j*.114,silver);
+  box(roofSkin,2.76,.028,1.44,-.1,4.284,0,dark);
+  for(let i=0;i<49;i++) box(roofSkin,.018,.02,1.32,-1.37+i*.052,4.305,-.025,edge);
+  for(let j=0;j<12;j++) box(roofSkin,2.65,.007,.008,-.1,4.319,-.65+j*.114,silver);
   cylinder(pc,.074,.019,1.47,4.289,.47,silver,'y'); ring(pc,.052,.008,1.47,4.304,.47,cyan,'y');
   for(const z of [-.12,.08]) box(pc,.045,.012,.102,1.49,4.288,z,dark);
   cylinder(pc,.027,.01,1.49,4.29,-.36,dark,'y');
   // Rear I/O slot, real connectors and ventilation slots.
   box(pc,.065,3.65,1.59,-1.66,2.17,0,chassis);
   box(pc,.08,1.42,.56,-1.707,3.18,-.4,silver);
-  for(let n=0;n<7;n++){box(pc,.09,.075,.16,-1.758,2.64+n*.16,-.4,dark);box(pc,.093,.038,.1,-1.76,2.64+n*.16,-.4,n%3===0?blue:rubber);}
+  // Socket cavities and contacts are supplied by the engineering detail layer.
   for(let i=0;i<8;i++)for(let k=0;k<4;k++)box(pc,.02,.055,.12,-1.704,1.24+i*.12,-.45+k*.2,dark);
   // Motherboard with layered traces and physical surface-mount components.
   const board=new THREE.Group();pc.add(board);
@@ -135,12 +136,13 @@ function startScene() {
   box(cpu,.74,.74,.045,-.36,2.97,-.716,silver);
   box(cpu,.61,.61,.055,-.36,2.97,-.66,copper);
   for(const dx of [-.39,.39])for(const dy of [-.39,.39]){box(cpu,.11,.11,.19,-.36+dx,2.97+dy,-.59,edge);screw(cpu,-.36+dx,2.97+dy,-.483,'z',.04);}
-  cylinder(cpu,.405,.28,-.36,2.97,-.452,chassis);
-  ring(cpu,.384,.025,-.36,2.97,-.292,cyan);
-  cylinder(cpu,.34,.014,-.36,2.97,-.296,dark);
-  ring(cpu,.287,.008,-.36,2.97,-.278,edge);
-  label(cpu,'NZXT',.36,.062,-.36,3.055,-.275,'#d4eced');
-  const tempLabel=label(cpu,'98°',.34,.16,-.36,2.91,-.27,'#8ce8ed');
+  const pumpCover=new THREE.Group();cpu.add(pumpCover);
+  cylinder(pumpCover,.405,.28,-.36,2.97,-.452,chassis);
+  ring(pumpCover,.384,.025,-.36,2.97,-.292,cyan);
+  cylinder(pumpCover,.34,.014,-.36,2.97,-.296,dark);
+  ring(pumpCover,.287,.008,-.36,2.97,-.278,edge);
+  label(pumpCover,'NZXT',.36,.062,-.36,3.055,-.275,'#d4eced');
+  const tempLabel=label(pumpCover,'98°',.34,.16,-.36,2.91,-.27,'#8ce8ed');
   addTarget(cpu,'cpu',.95,.93,.63,-.36,2.98,-.4);
   // Water hoses with tight cable sleeving and proper fittings, routed to roof radiator.
   for(let side=0;side<2;side++){
@@ -149,40 +151,43 @@ function startScene() {
     tube(cpu,[[x,3.26,-.22],[x+.16,3.61,.15],[.45+side*.21,3.84,.25],[.91+side*.22,3.8,-.09],[1.08+side*.15,3.95,-.24]],.058,rubber);
     for(let q=0;q<5;q++)ring(cpu,.067,.011,x,3.27+q*.024,-.24,edge,'y');
   }
-  box(cpu,2.63,.15,1.3,-.09,3.98,-.04,dark);
+  // A shallow bottom plate and end tanks keep the radiator fin passages open.
+  box(cpu,2.63,.024,1.3,-.09,3.905,-.04,dark);
+  for(const x of [-1.41,1.23])box(cpu,.065,.15,1.3,x,3.98,-.04,dark);
   for(let n=0;n<55;n++)box(cpu,.017,.125,1.17,-1.32+n*.046,3.97,-.03,silver);
   // DIMM slots: gold contacts, heat spreaders, miniature PCBs and diffused RGB.
-  const ram=component('ram');
+  const ram=component('ram'),ramCover=new THREE.Group();ram.add(ramCover);
   for(let n=0;n<4;n++)box(ram,.09,1.31,.16,.49+n*.17,2.9,-.67,dark);
   for(let n=0;n<2;n++){
     const x=.64+n*.34;box(ram,.064,1.2,.33,x,2.94,-.45,pcbMat);
-    for(let q=0;q<8;q++){box(ram,.07,.084,.18,x,2.49+q*.13,-.3,chipMat);box(ram,.073,.016,.04,x,2.49+q*.13,-.202,silver);}
-    box(ram,.12,1.22,.21,x,2.94,-.18,edge);
-    box(ram,.10,1.08,.058,x,2.94,-.039,n===0?cyan:violet);
-    for(let j=0;j<13;j++)box(ram,.13,.014,.065,x,2.41+j*.083,-.04,chassis);
+    box(ramCover,.12,1.22,.21,x,2.94,-.18,edge);
+    box(ramCover,.10,1.08,.058,x,2.94,-.039,n===0?cyan:violet);
+    for(let j=0;j<13;j++)box(ramCover,.13,.014,.065,x,2.41+j*.083,-.04,chassis);
     for(const y of [2.3,3.59])box(ram,.12,.12,.18,x,y,-.51,pale);
-    label(ram,'VENGEANCE',.66,.038,x,2.94,.001,'#e1f7ef',null,[0,0,Math.PI/2]);
+    label(ramCover,'VENGEANCE',.66,.038,x,2.94,.001,'#e1f7ef',null,[0,0,Math.PI/2]);
   }
   addTarget(ram,'ram',.78,1.48,.8,.81,2.95,-.37);
   // NVMe SSD with screw, controller, NAND and foil product label.
   const ssd=component('ssd');box(ssd,.79,.22,.027,-.8,2.15,-.66,pcbMat);
-  for(let n=0;n<3;n++)box(ssd,.16,.16,.035,-1.04+n*.19,2.15,-.628,chipMat);
-  box(ssd,.72,.16,.009,-.8,2.15,-.6,dark);label(ssd,'980 PRO   NVMe 1TB',.63,.06,-.82,2.15,-.591,'#c8cacb');
+  const ssdCover=new THREE.Group();ssd.add(ssdCover);
+  box(ssdCover,.72,.16,.009,-.8,2.15,-.6,dark);label(ssdCover,'980 PRO   NVMe 1TB',.63,.06,-.82,2.15,-.591,'#c8cacb');
   screw(ssd,-1.24,2.15,-.621,'z',.026);box(ssd,.08,.23,.064,-.36,2.15,-.668,edge);
   addTarget(ssd,'ssd',.98,.31,.17,-.81,2.15,-.62);
   // Triple-fan graphics card: a real multilayer assembly with exposed heatsink fins.
-  const gpu=component('gpu');box(gpu,2.7,.075,.75,-.1,1.88,-.13,dark);
-  box(gpu,2.55,.028,.78,-.1,1.93,-.13,edge);
-  for(let i=0;i<14;i++)box(gpu,.03,.012,.51,-1.2+i*.17,1.95,-.1,silver);
-  box(gpu,2.68,.28,.65,-.12,1.68,-.13,dark);
+  const gpu=component('gpu'),gpuCover=new THREE.Group();gpu.add(gpuCover);
+  box(gpuCover,2.7,.075,.75,-.1,1.88,-.13,dark);
+  box(gpuCover,2.55,.028,.78,-.1,1.93,-.13,edge);
+  for(let i=0;i<14;i++)box(gpuCover,.03,.012,.51,-1.2+i*.17,1.95,-.1,silver);
+  // Open rails leave the fin stack and heatpipes visible, not buried in a solid block.
+  for(const z of [-.44,.19])box(gpu,2.68,.028,.026,-.12,1.68,z,dark);
   for(let i=0;i<80;i++)box(gpu,.012,.28,.68,-1.42+i*.033,1.71,-.09,silver);
   for(let i=0;i<3;i++)tube(gpu,[[-1.28,1.73,-.41+i*.18],[-.76,1.68,-.46+i*.18],[.4,1.68,-.46+i*.18],[1.06,1.73,-.41+i*.18]],.021,copper);
-  box(gpu,2.81,.48,.08,-.13,1.67,.31,chassis);
-  box(gpu,2.74,.042,.09,-.13,1.936,.34,cyan);
-  box(gpu,2.74,.032,.086,-.13,1.421,.34,edge);
-  label(gpu,'GEFORCE RTX',1.31,.145,-.12,1.665,.358,'#d6e5e7');
-  label(gpu,'4070',.26,.095,1.055,1.66,.36,'#bde47b');
-  label(gpu,'ROG',.21,.1,-1.24,1.66,.36,'#adc5c8');
+  box(gpuCover,2.81,.48,.08,-.13,1.67,.31,chassis);
+  box(gpuCover,2.74,.042,.09,-.13,1.936,.34,cyan);
+  box(gpuCover,2.74,.032,.086,-.13,1.421,.34,edge);
+  label(gpuCover,'GEFORCE RTX',1.31,.145,-.12,1.665,.358,'#d6e5e7');
+  label(gpuCover,'4070',.26,.095,1.055,1.66,.36,'#bde47b');
+  label(gpuCover,'ROG',.21,.1,-1.24,1.66,.36,'#adc5c8');
   for(const x of [-1.37,1.1])for(const y of [1.49,1.87])screw(gpu,x,y,.367,'z',.025);
   // GPU cooling fans on the underside are visible when the view is rotated.
   for(let n=0;n<3;n++){
@@ -195,14 +200,15 @@ function startScene() {
   for(let n=0;n<3;n++)box(gpu,.13,.085,.17,-1.59,1.69,-.28+n*.2,dark);
   addTarget(gpu,'gpu',2.86,.56,1.0,-.13,1.7,-.06);
   // PSU bay and branding, honeycomb ventilation, modular cable sockets.
-  const psu=component('psu');box(psu,2.03,.82,1.52,-.59,.66,-.035,chassis);
-  box(psu,3.2,.064,1.66,0,1.12,-.018,edge);
-  box(psu,2.98,.76,.065,-.02,.66,.85,chassis);
-  box(psu,1.2,.38,.009,-.81,.66,.891,dark);
-  label(psu,'RM750',.93,.22,-.82,.68,.901,'#b6c6c8');label(psu,'80 PLUS GOLD',.6,.063,-.8,.48,.901,'#a79b7b');
-  label(psu,'CORSAIR',.66,.11,.58,.67,.892,'#a9b8bc');
-  for(let i=0;i<12;i++)for(let j=0;j<4;j++)box(psu,.043,.033,.014,-1.43+i*.245,1.015+j*.017,.89,dark);
-  for(let i=0;i<19;i++)box(psu,.018,.01,1.18,-1.42+i*.073,1.158,-.04,dark);
+  const psu=component('psu'),psuShell=new THREE.Group();psu.add(psuShell);
+  box(psuShell,2.03,.82,1.52,-.59,.66,-.035,chassis);
+  box(psuShell,3.2,.064,1.66,0,1.12,-.018,edge);
+  box(psuShell,2.98,.76,.065,-.02,.66,.85,chassis);
+  box(psuShell,1.2,.38,.009,-.81,.66,.891,dark);
+  label(psuShell,'RM750',.93,.22,-.82,.68,.901,'#b6c6c8');label(psuShell,'80 PLUS GOLD',.6,.063,-.8,.48,.901,'#a79b7b');
+  label(psuShell,'CORSAIR',.66,.11,.58,.67,.892,'#a9b8bc');
+  for(let i=0;i<12;i++)for(let j=0;j<4;j++)box(psuShell,.043,.033,.014,-1.43+i*.245,1.015+j*.017,.89,dark);
+  for(let i=0;i<19;i++)box(psuShell,.018,.01,1.18,-1.42+i*.073,1.158,-.04,dark);
   for(let i=0;i<5;i++)box(psu,.1,.23,.3,.42,.68,-.58+i*.235,dark);
   addTarget(psu,'psu',3.08,.88,1.65,0,.68,.02);
   // Front face: three deep recessed RGB intake fans, fine wire intake grille.
@@ -237,9 +243,9 @@ function startScene() {
   for(let n=0;n<2;n++)caseFan(cpu,0,n,true);
   const cableMat=mat(0x24303a,.1,.8), cableWhite=mat(0x84949c,.2,.64);
   // Mainboard 24-pin cable: twenty-four separate wires curved down into the bay.
-  for(let n=0;n<12;n++){
-    const z=-.44+n*.027;
-    tube(pc,[[1.13,2.8,z],[1.35,2.8,z+.1],[1.43,2.57,z+.18],[1.41,1.54,z+.2],[1.31,1.06,z+.1]],.016,n%3===0?cableWhite:cableMat,40);
+  for(let row=0;row<2;row++)for(let n=0;n<12;n++){
+    const z=-.44+n*.027,y=2.8+row*.045;
+    tube(pc,[[1.13,y,z],[1.35,y,z+.1],[1.43+row*.04,2.57,z+.18],[1.41+row*.04,1.54,z+.2],[1.31+row*.04,1.06,z+.1]],.014,n%3===0?cableWhite:cableMat,40);
   }
   box(pc,.19,.43,.34,1.145,2.65,-.36,dark);
   for(const y of [1.62,2.15,2.5])box(pc,.16,.045,.47,1.42,y,-.09,chassis);
@@ -264,6 +270,7 @@ function startScene() {
   const dust=new THREE.Points(dustGeo,new THREE.PointsMaterial({color:0x9c9a86,size:.012,transparent:true,opacity:.28,depthWrite:false}));pc.add(dust);
   const detail=buildMicroDetail({pc,board,parts,renderer,materials:{chassis,edge,silver,gold,dark,pcbMat,chipMat,rubber,copper,cyan},box,cylinder,ring,tube,label,screw});
   container.dataset.microInstances=String(detail.instances);
+  container.dataset.engineeringAssemblies=String(detail.engineering.assemblies.length);
   // Workbench surface, recessed maintenance mat and measurement grid.
   const floorMat=mat(0x131e25,.4,.77);
   box(scene,200,.13,200,0,-.27,0,floorMat);
@@ -289,7 +296,46 @@ function startScene() {
   const intakeGlow=new THREE.PointLight(0x669adc,3,4,2);intakeGlow.position.set(2.35,1.8,0);scene.add(intakeGlow);
   const groundGlow=new THREE.PointLight(0x7199e8,1.3,3,2);groundGlow.position.set(1.2,.18,.4);scene.add(groundGlow);
   const warmer=new THREE.PointLight(0xc8df94,1,6,2);warmer.position.set(-3,3,1);scene.add(warmer);
-  const inspection={macro:false,exploded:false,thermal:false,light:false,rgb:0};
+  const inspection={macro:false,exploded:false,thermal:false,light:false,cutaway:false,isolate:false,spread:.65,rgb:0};
+  let atlasKey='';
+  const atlas={
+    io:{title:'背面 I/O',tag:'01 / SIGNAL INTERFACE',target:[-1.8,3.23,-.15],eye:[-3.1,.3,.5],text:'USBのシールド・9接点、LANの8接点、Type-C、音声端子、Wi-Fi端子を立体化。右側には排気ファンの同心円ガード。',spec:'USB 3.2 / 2.5G LAN / Wi-Fi'},
+    power:{title:'電源内部',tag:'02 / POWER CONVERSION',part:'psu',target:[-.6,.55,-.02],eye:[.6,2.15,2.7],cut:true,text:'巻線を一本ずつ表現したトロイダルコイル、主平滑コンデンサ、LLCトランス、二次側フィルター、放熱フィンを観察。',spec:'コイル / トランス / 平滑回路'},
+    pump:{title:'水冷ポンプ',tag:'03 / COLD PLATE',part:'cpu',target:[-.36,2.99,-.46],eye:[.3,.4,1.85],cut:true,text:'カバーの下に12枚羽根のインペラ、49本の銅製マイクロフィン、Oリング。ホース接続部には圧縮継手とねじ山。',spec:'銅製フィン / インペラ / シール'},
+    routing:{title:'裏配線',tag:'04 / CABLE MANAGEMENT',target:[0,2.15,-1.07],eye:[-.5,.4,-5.8],text:'マザーボードトレイの裏側。個別スリーブ、固定バンド、PWM・ARGBハブ、4系統のファン配線まで追えます。',spec:'EPS / ATX / PWM・ARGB'},
+    headers:{solo:true,title:'基板・端子',tag:'05 / BOARD LEVEL',target:[.52,1.45,-.63],eye:[.12,.5,2.4],text:'USB・フロントパネルのピンヘッダー、CMOS電池、実装抵抗と金属端子。基板の配線・部品番号も接写できます。',spec:'ピンヘッダー / CMOS / SMD'},
+    radiator:{title:'ラジエーター',tag:'06 / HEAT EXCHANGER',part:'cpu',target:[-.09,3.99,-.04],eye:[.4,3.2,1.8],cut:true,text:'天板を非表示にして熱交換器を観察。972枚の波形フィン区画、端部タンク、固定ネジ、ホースの取り回しを追加。',spec:'波形フィン / 端部タンク / 継手'},
+    gpu:{title:'GPU 冷却機構',tag:'07 / GRAPHICS ASSEMBLY',part:'gpu',target:[-.1,2.05,0],eye:[-.4,2.4,4.6],cut:true,solo:true,text:'冷却器・銅製プレート・GPU基板・サーマルパッド・開口バックプレートを別々の立体層に。スライダーで間隔を調整できます。',spec:'ばね付き固定ネジ / 銅製プレート / GDDR6X',layers:['バックプレート','放熱パッド','GPU基板','冷却器']},
+    ssd:{title:'NVMe SSD 内部',tag:'08 / STORAGE SILICON',part:'ssd',target:[-.83,2.3,-.43],eye:[.45,.55,1.85],cut:true,solo:true,text:'NANDとコントローラーの下に270個のBGAはんだ。銅製シールド、熱伝導パッド、パッケージ、基板を分離して観察できます。',spec:'BGA 270点 / NAND / コントローラー',layers:['銅製シールド','熱伝導パッド','NAND・CTRL','BGA・基板']},
+    memory:{title:'DDR5 メモリ内部',tag:'09 / MEMORY MODULE',part:'ram',target:[1.04,2.94,-.3],eye:[2.75,.35,2.25],cut:true,solo:true,text:'2枚のメモリに16個のDRAMパッケージと864個のBGAはんだ。PMIC、SPDハブ、終端部品、ラッチ軸、着脱式放熱板まで立体化。',spec:'DRAM / PMIC / SPD / ラッチ',layers:['放熱板','熱伝導パッド','DRAM','BGA・基板']},
+    chassis:{title:'ケース・固定金具',tag:'10 / MECHANICAL FITTINGS',target:[0,1.8,.5],eye:[3,2.1,6],solo:true,cut:true,text:'四隅の補強板、脱落防止ネジのねじ山、防振ワッシャー、ダストフィルター。分離スライダーでフィルターを引き出せます。',spec:'キャプティブネジ / 補強板 / フィルター',layers:['固定金具','ワッシャー','ダストフィルター']}
+  };
+  const atlasPanel=document.createElement('section');atlasPanel.className='engineering-atlas';atlasPanel.setAttribute('aria-label','PC精密アトラス');
+  atlasPanel.innerHTML='<div class="atlas-heading"><div><span class="eyebrow">ENGINEERING ATLAS</span><strong>構造を、ひとつ奥まで。</strong></div><span class="atlas-count">10 VIEWS</span></div><div class="atlas-controls"><label for="atlas-select">観察箇所</label><select id="atlas-select"><option value="">全体表示</option></select><button id="cutaway-button" aria-pressed="false">内部断面</button><button id="atlas-reset" aria-label="接写・分解図・温度・内部断面を解除して全体へ戻す">戻す</button></div><div id="atlas-info" class="atlas-info" hidden aria-live="polite"><span id="atlas-tag"></span><p id="atlas-copy"></p><small id="atlas-spec"></small><div id="layer-legend" class="layer-legend"></div></div><div class="layer-controls"><button id="isolate-button" aria-pressed="false">単体表示</button><label for="layer-spread">レイヤー分離</label><input id="layer-spread" type="range" min="0" max="100" value="65" step="5" aria-describedby="layer-help"><output id="layer-value" for="layer-spread">65%</output></div><p id="layer-help" class="layer-help">内部断面ONでSSD・メモリ・GPUの層を分離。単体表示は観察箇所の選択後に使えます。</p><p class="atlas-note">観察専用・作業状態や在庫は変わりません。電源内部は模式模型です。実機の電源は分解しないでください。</p>';
+  document.getElementById('inspection-caption').after(atlasPanel);
+  const atlasSelect=document.getElementById('atlas-select');
+  for(const [key,entry] of Object.entries(atlas)){const option=document.createElement('option');option.value=key;option.textContent=entry.title;atlasSelect.append(option);}
+  const cutawayButton=document.getElementById('cutaway-button');
+  const isolateButton=document.getElementById('isolate-button'),layerSlider=document.getElementById('layer-spread');
+  const hiddenContext=new Map();
+  function restoreContext(){for(const [node,visible] of hiddenContext)node.visible=visible;hiddenContext.clear();}
+  function isolateContext(){
+    if(!inspection.isolate||!atlasKey)return;
+    const entry=atlas[atlasKey],roots=entry.part?[parts[entry.part]]:atlasKey==='headers'?[board]:atlasKey==='chassis'?[detail.layers.groups['chassis-hardware'],detail.layers.groups['dust-filter']]:detail.engineering.assemblies.filter(g=>atlasKey==='routing'?g.name==='rear-harness':['rear-io','rear-exhaust'].includes(g.name));
+    const keep=new Set(roots.map(root=>{while(root.parent&&root.parent!==pc)root=root.parent;return root;}));
+    for(const node of pc.children)if(!keep.has(node)){hiddenContext.set(node,node.visible);node.visible=false;}
+  }
+  isolateButton.addEventListener('click',()=>{if(!atlasKey||!currentState?.active)return;inspection.isolate=!inspection.isolate;syncInspection();});
+  layerSlider.addEventListener('input',()=>{inspection.spread=Number(layerSlider.value)/100;syncInspection();});
+  function selectAtlas(key){
+    if(!currentState?.active){window.RigGame?.toast('観察するPCがありません。新しい依頼を受けてください。');atlasSelect.value='';return;}
+    atlasKey=key;inspection.macro=!!key;
+    inspection.isolate=!!atlas[key]?.solo;
+    if(key){inspection.cutaway=!!atlas[key].cut;focusComponent();syncInspection();}else{inspection.cutaway=false;resetCamera();}
+  }
+  atlasSelect.addEventListener('change',()=>selectAtlas(atlasSelect.value));
+  cutawayButton.addEventListener('click',()=>{if(!currentState?.active)return;inspection.cutaway=!inspection.cutaway;syncInspection();});
+  document.getElementById('atlas-reset').addEventListener('click',()=>{inspection.exploded=inspection.thermal=inspection.cutaway=inspection.isolate=false;resetCamera();});
   const inspectionLight=new THREE.PointLight(0xe6f2e9,0,9,2);scene.add(inspectionLight);
   let mobile=false, camTarget=null;
   function defaultPosition(){return mobile?new THREE.Vector3(6.55,4.05,8.8):new THREE.Vector3(5.7,3.85,7.9);}
@@ -307,40 +353,57 @@ function startScene() {
   let currentState=window.RigGame?.state,selected=window.RigGame?.selected||'cpu',panelDestination=0,repairPulse=0,powered=false,cleaned=false;
   function updateState(){
     const s=window.RigGame?.state;if(!s)return;currentState=s;selected=window.RigGame?.selected||selected;panelDestination=s.active?.panelOpen?1:0;powered=!!s.active?.powered;cleaned=!!s.active?.cleaned;dust.visible=!cleaned&&!!s.active;pc.visible=!!s.active;document.getElementById('part-tooltip').hidden=!s.settings.labels||!s.active;
+    atlasSelect.disabled=cutawayButton.disabled=!s.active;
+    if(!s.active){restoreContext();atlasKey='';inspection.macro=inspection.exploded=inspection.cutaway=inspection.thermal=inspection.isolate=false;syncInspection();}
     const faulty=s.active?.faults.includes('cpu')&&!s.active?.repaired.includes('cpu');
     const canvas=tempLabel.material.map.image,ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle=faulty?'#f7ab78':'#a4eac6';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 60px Arial';ctx.fillText(faulty?'98°':'38°',512,65);tempLabel.material.map.needsUpdate=true;
   }
   updateState();window.addEventListener('rig-state',updateState);window.addEventListener('rig-ready',updateState);
-  window.addEventListener('rig-select',e=>{selected=e.detail;repairPulse=.4;if(inspection.macro)focusComponent();});
+  window.addEventListener('rig-select',e=>{selected=e.detail;atlasKey='';repairPulse=.4;if(inspection.macro)focusComponent();syncInspection();});
   window.addEventListener('rig-repair',e=>{selected=e.detail;repairPulse=1.7;});
   window.addEventListener('rig-clean',()=>{dust.visible=false;});
-  function resetCamera(){inspection.macro=false;controls.target.set(0,inspection.exploded?2.15:1.9,inspection.exploded?.55:0);camTarget=inspection.exploded?new THREE.Vector3(8.6,5.4,12.4):defaultPosition();syncInspection();}
+  function resetCamera(){atlasKey='';inspection.isolate=false;restoreContext();inspection.macro=false;controls.target.set(0,inspection.exploded?2.15:1.9,inspection.exploded?.55:0);camTarget=inspection.exploded?new THREE.Vector3(8.6,5.4,12.4):defaultPosition();syncInspection();}
   window.addEventListener('rig-reset-view',resetCamera);
-  window.addEventListener('rig-view',e=>{inspection.macro=false;syncInspection();controls.target.set(0,1.95,0);camTarget=e.detail==='side'?new THREE.Vector3(0,2.95,mobile?10.7:9.3):new THREE.Vector3(mobile?10.8:9.4,3.0,.65);});
+  window.addEventListener('rig-view',e=>{atlasKey='';inspection.macro=false;syncInspection();controls.target.set(0,1.95,0);camTarget=e.detail==='side'?new THREE.Vector3(0,2.95,mobile?10.7:9.3):new THREE.Vector3(mobile?10.8:9.4,3.0,.65);});
   function focusComponent(){
+    if(atlasKey){
+      const entry=atlas[atlasKey],target=new THREE.Vector3(...entry.target);
+      if(entry.part&&inspection.exploded)target.add(new THREE.Vector3(...detail.offsets[entry.part]));
+      controls.target.copy(target);camTarget=target.clone().add(new THREE.Vector3(...entry.eye).multiplyScalar(Math.max(1,.9/camera.aspect)));return;
+    }
     const o=detail.origins[selected],v=detail.offsets[selected],e=inspection.exploded?1:0;
     const target=new THREE.Vector3(o[0]+v[0]*e,o[1]+v[1]*e,o[2]+v[2]*e);
     controls.target.copy(target);const distance={cpu:2.0,ram:2.8,gpu:5.0,ssd:1.8,psu:5.0,fan:6.8}[selected];
     camTarget=target.clone().add(selected==='fan'?new THREE.Vector3(distance,.4,1.7):new THREE.Vector3(.24,.3,distance));
   }
   function syncInspection(){
+    atlasSelect.value=atlasKey;cutawayButton.setAttribute('aria-pressed',String(inspection.cutaway));
+    isolateButton.disabled=!atlasKey||!currentState?.active;isolateButton.setAttribute('aria-pressed',String(inspection.isolate&&!!atlasKey));
+    layerSlider.disabled=!currentState?.active||(!inspection.cutaway&&!inspection.exploded);
+    document.getElementById('layer-value').value=Math.round(inspection.spread*100)+'%';
+    const legend=document.getElementById('layer-legend');legend.replaceChildren();
+    for(const text of atlas[atlasKey]?.layers||[]){const span=document.createElement('span');span.textContent=text;legend.append(span);}
+    container.dataset.isolated=String(inspection.isolate&&!!atlasKey);container.dataset.layerSpread=String(inspection.spread);container.dataset.layerSettled='false';
+    document.getElementById('atlas-info').hidden=!atlasKey;
+    if(atlasKey){document.getElementById('atlas-tag').textContent=atlas[atlasKey].tag;document.getElementById('atlas-copy').textContent=atlas[atlasKey].text;document.getElementById('atlas-spec').textContent=atlas[atlasKey].spec;}
+    container.dataset.atlas=atlasKey;container.dataset.cutaway=String(inspection.cutaway);
     for(const name of ['macro','exploded','thermal','light'])document.querySelector(`[data-inspection="${name}"]`)?.setAttribute('aria-pressed',String(inspection[name]));
     document.getElementById('macro-hud').hidden=!inspection.macro;
     document.getElementById('thermal-legend').hidden=!inspection.thermal;
-    document.getElementById('inspection-caption').textContent=inspection.exploded?'分解図は観察用です。実際の作業状態は変わりません。':inspection.macro?'透視接写モード · 左右ボタンで部品を切り替え':inspection.thermal?'温度分布は診断結果から生成するゲーム内の模式表示です。':'部品の裏側まで、あなたの目で。';
+    document.getElementById('inspection-caption').textContent=atlasKey?'精密アトラス · ドラッグで回転 / 観察箇所を選んで移動':inspection.exploded?'分解図は観察用です。実際の作業状態は変わりません。':inspection.macro?'透視接写モード · 左右ボタンで部品を切り替え':inspection.thermal?'温度分布は診断結果から生成するゲーム内の模式表示です。':'部品の裏側まで、あなたの目で。';
     document.getElementById('stage').classList.toggle('macro-active',inspection.macro);
   }
   function inspectionAction(name){
     if(!window.RigGame?.state.active){window.RigGame?.toast('観察するPCがありません。新しい依頼を受けてください。');return;}
     if(name==='rgb'){inspection.rgb=(inspection.rgb+1)%4;document.getElementById('rgb-mode-label').textContent=['ICE','SPECTRUM','WHITE','OFF'][inspection.rgb];detail.setRGB(inspection.rgb);[cyan,blue,violet,green,whiteLed].forEach(m=>{if(!m.userData.baseEmission)m.userData.baseEmission={color:m.emissive.clone(),intensity:m.emissiveIntensity};m.emissive.copy(inspection.rgb===2?new THREE.Color(0xd5e5df):m.userData.baseEmission.color);m.emissiveIntensity=inspection.rgb===3?0:m.userData.baseEmission.intensity;});return;}
     inspection[name]=!inspection[name];
-    if(name==='macro'){if(inspection.macro)focusComponent();else resetCamera();}
+    if(name==='macro'){atlasKey='';if(inspection.macro)focusComponent();else resetCamera();}
     if(name==='exploded'){if(inspection.macro)focusComponent();else resetCamera();}
     syncInspection();
   }
   document.querySelectorAll('[data-inspection]').forEach(b=>b.addEventListener('click',()=>inspectionAction(b.dataset.inspection)));
-  document.querySelectorAll('[data-macro-step]').forEach(b=>b.addEventListener('click',()=>{const keys=Object.keys(parts),index=keys.indexOf(selected);window.RigGame?.focus(keys[(index+Number(b.dataset.macroStep)+keys.length)%keys.length]);}));
-  window.addEventListener('rig-macro',()=>{inspection.macro=true;focusComponent();syncInspection();});
+  document.querySelectorAll('[data-macro-step]').forEach(b=>b.addEventListener('click',()=>{if(atlasKey){const keys=Object.keys(atlas),index=keys.indexOf(atlasKey);selectAtlas(keys[(index+Number(b.dataset.macroStep)+keys.length)%keys.length]);return;}const keys=Object.keys(parts),index=keys.indexOf(selected);window.RigGame?.focus(keys[(index+Number(b.dataset.macroStep)+keys.length)%keys.length]);}));
+  window.addEventListener('rig-macro',()=>{atlasKey='';inspection.macro=true;focusComponent();syncInspection();});
   window.addEventListener('rig-inspection',e=>inspectionAction(e.detail));
   controls.addEventListener('start',()=>{camTarget=null;});
   syncInspection();
@@ -356,21 +419,26 @@ function startScene() {
   function animate(){
     const elapsed=clock.getDelta(),dt=Math.min(elapsed,.05),t=clock.elapsedTime;
     if(camTarget){camera.position.lerp(camTarget,1-Math.exp(-Math.min(elapsed,.5)*9));if(camera.position.distanceTo(camTarget)<.015)camTarget=null;}
-    controls.update();detail.update(Math.min(elapsed,.25),t,{exploded:inspection.exploded,heat:inspection.thermal,job:currentState?.active});
-    panel.visible=!inspection.macro;panelProgress=THREE.MathUtils.lerp(panelProgress,inspection.exploded?1:panelDestination,1-Math.exp(-dt*5));
+    restoreContext();controls.update();detail.update(Math.min(elapsed,.25),t,{exploded:inspection.exploded,heat:inspection.thermal,job:currentState?.active,cutaway:inspection.cutaway,spread:inspection.spread});
+    const sectionOpen=inspection.cutaway||detail.explosion>.08;
+    psuShell.visible=pumpCover.visible=roofSkin.visible=ramCover.visible=ssdCover.visible=gpuCover.visible=!sectionOpen;
+    container.dataset.sectionVisible=String(sectionOpen);
+    panel.visible=!inspection.macro&&!inspection.cutaway;panelProgress=THREE.MathUtils.lerp(panelProgress,inspection.exploded?1:panelDestination,1-Math.exp(-dt*5));
     inspectionLight.position.copy(camera.position);inspectionLight.intensity=inspection.light?18:0;
-    document.getElementById('macro-part-label').textContent=(window.RepairCore?.PARTS[selected]?.short||'CPU')+' / MACRO';
+    document.getElementById('macro-part-label').textContent=atlasKey?atlas[atlasKey].title+' / DETAIL':(window.RepairCore?.PARTS[selected]?.short||'CPU')+' / MACRO';
     panel.position.set(-panelProgress*1.9,panelProgress*.13,panelProgress*1.75);panel.rotation.y=-panelProgress*.27;
     // Standby RGB is powered by the workbench's isolated low-voltage lighting feed.
     for(const f of fanRotors)f.rotor.rotation.z+=dt*f.speed*(powered?9:0);
     inside.intensity=3.6+Math.sin(t*.6)*.25;
     if(repairPulse>0){repairPulse-=dt;const target=pickables.find(o=>o.userData.part===selected);if(target){highlight.box.setFromObject(target);highlight.visible=pc.visible;highlight.material.transparent=true;highlight.material.opacity=Math.min(.5,repairPulse*.7);}}else highlight.visible=false;
-    if(currentState?.settings.labels&&pc.visible){projected.set(...anchors[selected]).add(parts[selected].position).applyMatrix4(pc.matrixWorld).project(camera);const x=(projected.x*.5+.5)*container.clientWidth,y=(-projected.y*.5+.5)*container.clientHeight;tooltip.hidden=projected.z>1||x<75||x>container.clientWidth-70||y<100||y>container.clientHeight-50;if(!tooltip.hidden){tooltip.style.left=x+'px';tooltip.style.top=(y-12)+'px';tooltipText.textContent=window.RepairCore?.PARTS[selected]?.short||selected.toUpperCase();}}else tooltip.hidden=true;
+    if(currentState?.settings.labels&&pc.visible&&!atlasKey){projected.set(...anchors[selected]).add(parts[selected].position).applyMatrix4(pc.matrixWorld).project(camera);const x=(projected.x*.5+.5)*container.clientWidth,y=(-projected.y*.5+.5)*container.clientHeight;tooltip.hidden=projected.z>1||x<75||x>container.clientWidth-70||y<100||y>container.clientHeight-50;if(!tooltip.hidden){tooltip.style.left=x+'px';tooltip.style.top=(y-12)+'px';tooltipText.textContent=window.RepairCore?.PARTS[selected]?.short||selected.toUpperCase();}}else tooltip.hidden=true;
+    isolateContext();
+    container.dataset.layerSettled=String(Math.abs(detail.layers.amount-(sectionOpen?inspection.spread:0))<.01);
     composer.render();
     presentFrame();
-    if(!camTarget&&Math.abs(detail.explosion-(inspection.exploded?1:0))<.01)container.dataset.viewSettled=inspection.macro?'macro':inspection.exploded?'exploded':inspection.thermal?'thermal':'normal';else delete container.dataset.viewSettled;
+    if(!camTarget&&Math.abs(detail.explosion-(inspection.exploded?1:0))<.01)container.dataset.viewSettled=atlasKey?'atlas-'+atlasKey:inspection.macro?'macro':inspection.exploded?'exploded':inspection.thermal?'thermal':'normal';else delete container.dataset.viewSettled;
     if(frameCount===2){loading.style.display='none';container.dataset.ready='true';console.info('RIG 3D ready — '+detail.instances+' additional physical micro-details; SSAO, 4K shadows and macro optics active.');
-      const view=new URLSearchParams(location.search).get('view');if(new URLSearchParams(location.search).get('qa')==='1'){if(view==='macro')inspectionAction('macro');if(view==='exploded')inspectionAction('exploded');if(view==='thermal')inspectionAction('thermal');}}
+      const view=new URLSearchParams(location.search).get('view');if(new URLSearchParams(location.search).get('qa')==='1'){if(view==='macro')inspectionAction('macro');if(view==='exploded')inspectionAction('exploded');if(view==='thermal')inspectionAction('thermal');if(view==='atlas')selectAtlas(Object.hasOwn(atlas,new URLSearchParams(location.search).get('detail'))?new URLSearchParams(location.search).get('detail'):'power');}}
     if(container.dataset.viewSettled&&container.dataset.viewSettled!==lastLoggedView){lastLoggedView=container.dataset.viewSettled;console.info('3D view settled',lastLoggedView,'distance',camera.position.distanceTo(controls.target).toFixed(2),'camera',camera.position.toArray().map(v=>v.toFixed(2)).join(','),'viewport',container.clientWidth+'x'+container.clientHeight);
       if(new URLSearchParams(location.search).get('qa')==='1'){const gl=renderer.getContext(),px=new Uint8Array(32*32*4);gl.readPixels(Math.floor(renderer.domElement.width/2)-16,Math.floor(renderer.domElement.height/2)-16,32,32,gl.RGBA,gl.UNSIGNED_BYTE,px);const colors=new Set();let max=0;for(let i=0;i<px.length;i+=4){colors.add(px[i]+','+px[i+1]+','+px[i+2]);max=Math.max(max,px[i],px[i+1],px[i+2]);}console.info('CANVAS QA',JSON.stringify({rect:displayCanvas.getBoundingClientRect().toJSON(),buffer:[renderer.domElement.width,renderer.domElement.height],visible:pc.visible,uniqueColors:colors.size,max,firstPixel:Array.from(px.slice(0,4)),display:getComputedStyle(renderer.domElement).display,visibility:getComputedStyle(renderer.domElement).visibility,opacity:getComputedStyle(renderer.domElement).opacity}));}}
     frameCount++;
