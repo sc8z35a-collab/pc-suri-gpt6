@@ -5,7 +5,7 @@
 @media(max-width:370px){.app-shell{padding-left:10px;padding-right:10px}.stage{height:360px}.stat strong{font-size:19px}.stat{padding-right:10px}.day-block h1{font-size:17px}.day-block p{font-size:8px}.labels-button .toggle-dot{display:none}.tool-button{font-size:7px}.save-status{display:none}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}.loader{animation-duration:2s}}
 
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+@media(prefers-reduced-motion:reduce){*:not(.timing-needle),*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}.timing-needle{animation-duration:2.6s!important}}
 @media(max-width:800px){#toast-region{bottom:calc(80px + env(safe-area-inset-bottom))}}
 input:focus-visible,canvas:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 .job-body h2,.contract-card h3,.part-card h3{overflow-wrap:anywhere}
