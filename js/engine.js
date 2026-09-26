@@ -118,7 +118,7 @@
       if (label.startsWith('修理納品')) totals.revenue += amount;
       this.state.ledger.unshift({ day: this.state.day, label, amount }); this.state.ledger = this.state.ledger.slice(0, 60);
     }
-    diagnose(part) { const job = this.active; if (part !== undefined && part !== null && part !== '' && !has(PARTS, part)) throw new Error('診断するパーツを選択してください。'); part = part || null; const time = this.state.upgrades.diagnostic ? 15 : 40; this.spendTime(part ? Math.ceil(time / 2) : time); const keys = part ? [part] : Object.keys(PARTS); keys.forEach(k => { if (!job.diagnosed.includes(k)) job.diagnosed.push(k); }); const faults=keys.filter(k => job.faults.includes(k) && !job.repaired.includes(k)); this.logWork(part?'個別診断':'全体診断',part||null,faults.length?'異常検出：'+faults.map(k=>PARTS[k].short).join(' / '):'検査対象は正常'); return faults; }
+    diagnose(part) { const job = this.active; if (part !== undefined && part !== null && part !== '' && !has(PARTS, part)) throw new Error('診断するパーツを選択してください。'); part = part || null; if ((part ? [part] : Object.keys(PARTS)).every(k => job.diagnosed.includes(k))) throw new Error(part ? 'このパーツは診断済みです。' : '全パーツ診断済みです。'); const time = this.state.upgrades.diagnostic ? 15 : 40; this.spendTime(part ? Math.ceil(time / 2) : time); const keys = part ? [part] : Object.keys(PARTS); keys.forEach(k => { if (!job.diagnosed.includes(k)) job.diagnosed.push(k); }); const faults=keys.filter(k => job.faults.includes(k) && !job.repaired.includes(k)); this.logWork(part?'個別診断':'全体診断',part||null,faults.length?'異常検出：'+faults.map(k=>PARTS[k].short).join(' / '):'検査対象は正常'); return faults; }
     panel() { const job = this.active; this.spendTime(5); job.powered = false; job.panelOpen = !job.panelOpen; if (job.panelOpen) job.tested = false; this.logWork(job.panelOpen?'サイドパネル取り外し':'サイドパネル復旧',null,'電源切断・ESD対策済み'); return job.panelOpen; }
     repair(part, premium = false, precision = 0, technique = '精度ゲージ / 自動作業') {
       const job = this.active;
@@ -134,7 +134,7 @@
       stock[item]--; job.repaired.push(part); job.tested = false; job.premium += premium ? 1 : 0; job.precisionBonus = (job.precisionBonus || 0) + (precision >= 85 ? 800 : precision >= 60 ? 400 : 0); job.partCosts += Math.round(CATALOG[item].price * (premium ? 1.35 : 1)); this.logWork('修理・交換完了',part,`${premium?'高品質':'標準'} / ${technique} / 精度 ${precision}%`); return PARTS[part].name;
     }
     clean() { const job = this.active; if (!job.panelOpen) throw new Error('先にサイドパネルを外してください。'); if (job.cleaned) throw new Error('すでにクリーニング済みです。'); this.spendTime(20); job.cleaned = true; job.powered = false; job.tested = false; this.logWork('内部クリーニング',null,'基板・吸気フィルター・冷却フィンの除塵'); }
-    test() { const job = this.active; if (job.panelOpen) throw new Error('安全のためパネルを取り付けてからテストしてください。'); this.spendTime(30); const faults = job.faults.filter(k => !job.repaired.includes(k)); job.tested = !faults.length; job.powered = !faults.includes('psu'); this.logWork('起動・安定性テスト',null,faults.length?'FAIL：'+faults.map(k=>PARTS[k].short).join(' / '):'全5項目 PASS / OS起動・負荷テスト完了'); return { pass: !faults.length, faults }; }
+    test() { const job = this.active; if (job.tested) throw new Error('起動テストは合格済みです。納品できます。'); if (job.panelOpen) throw new Error('安全のためパネルを取り付けてからテストしてください。'); this.spendTime(30); const faults = job.faults.filter(k => !job.repaired.includes(k)); job.tested = !faults.length; job.powered = !faults.includes('psu'); this.logWork('起動・安定性テスト',null,faults.length?'FAIL：'+faults.map(k=>PARTS[k].short).join(' / '):'全5項目 PASS / OS起動・負荷テスト完了'); return { pass: !faults.length, faults }; }
     quote() { const job = this.active; const lateDays = Math.max(0, this.state.day - job.due); const penalty = Math.round(job.reward * Math.min(.6, lateDays * .15)); const cleanBonus = job.cleaned ? 500 : 0; const premiumBonus = job.premium * 2000; const precisionBonus = job.precisionBonus || 0; return { base: job.reward, cleanBonus, premiumBonus, precisionBonus, penalty, lateDays, total: job.reward + cleanBonus + premiumBonus + precisionBonus - penalty }; }
     deliver() {
       const job = this.active;
@@ -166,7 +166,7 @@
     buy(item, premium = false) { if (!has(CATALOG, item)) throw new Error('商品が見つかりません。'); const price = this.price(item, premium); if (this.state.cash < price) throw new Error('所持金が足りません。経営メニューで融資を受けられます。'); this.spendTime(10); this.transaction(`${premium ? '高品質 ' : ''}${CATALOG[item].name} 仕入れ`, -price); const stock = premium ? this.state.premiumStock : this.state.inventory; stock[item] = (stock[item] || 0) + 1; }
     sell(item, premium = false) { if (!has(CATALOG, item)) throw new Error('商品が見つかりません。'); const stock = premium ? this.state.premiumStock : this.state.inventory; if (!(stock[item] > 0)) throw new Error('在庫がありません。'); stock[item]--; const value = Math.round(this.price(item, premium) * .6); this.transaction(CATALOG[item].name + ' 売却', value); return value; }
     upgrade(key) { const prices = { diagnostic: 14000, supplier: 18000, bench: 22000 }; if (!has(prices, key)) throw new Error('設備が見つかりません。'); if (this.state.upgrades[key]) throw new Error('導入済みです。'); this.transaction('工房設備投資', -prices[key]); this.state.upgrades[key] = true; }
-    loan() { if (this.state.debt >= 30000) throw new Error('融資上限は ¥30,000 です。不要な在庫を売却するか、依頼を完了しましょう。'); this.state.debt += 10000; this.transaction('事業融資', 10000); }
+    loan() { const amount = Math.min(10000, 30000 - this.state.debt); if (amount <= 0) throw new Error('融資上限は ¥30,000 です。不要な在庫を売却するか、依頼を完了しましょう。'); this.transaction('事業融資', amount); this.state.debt += amount; return amount; }
     repay() { const value = Math.min(this.state.debt, 10000); if (!value) throw new Error('借入金はありません。'); this.transaction('融資返済', -value); this.state.debt -= value; }
     abandon() {
       const job = this.active; if (this.state.cash < 1000) throw new Error('キャンセル料 ¥1,000 が必要です。');
@@ -185,7 +185,7 @@
       if (shortfall) { this.state.debt += shortfall; this.transaction('未払い固定費の繰延（借入）', shortfall); }
       this.transaction('家賃・電気代', -rent); if (interest) this.transaction('融資利息 (1%)', -interest);
       const report = { day: this.state.day, revenue, otherIncome: income - revenue + shortfall, expenses: out + cost, profit: income + shortfall - out - cost, rent, interest, deferred: shortfall };
-      this.state.days.push(report); this.state.days = this.state.days.slice(-14); this.state.day++; this.state.minute = 540; this.state.accepted = []; return report;
+      this.state.days.push(report); this.state.days = this.state.days.slice(-14); this.state.day++; this.state.minute = 540; this.state.accepted = []; this.state.dailyTotals = { day: this.state.day, income: 0, outgoing: 0, revenue: 0 }; return report;
     }
   }
   window.RepairCore = { RepairGame, PARTS, CATALOG, initialState, TEMPLATES };
