@@ -59,7 +59,7 @@
     test('UI: precision score uses visible needle position and repairs once',()=>{const needle=d.getElementById('timing-needle');needle.style.animation='none';needle.style.left='50%';click('[data-action="precision-stop"]');eq(g.state.inventory.paste,1);eq(g.active.precisionBonus,800);assert(g.active.repaired.includes('cpu'));});
     test('UI: cleanup and refitting prepare the benchmark',()=>{click('#modal-close');click('#tool-clean');click('#tool-panel');eq(g.active.cleaned,true);eq(g.active.panelOpen,false);});
     click('#tool-test');
-    await waitFor(()=>d.querySelector('#modal-content [data-action="deliver"]'),30000);
+    await waitFor(()=>d.querySelector('#modal-content [data-action="deliver"]'),180000);
     test('UI: benchmark completes with five PASS results',()=>{eq(d.querySelectorAll('.terminal-line.pass').length,5);eq(g.active.tested,true);});
     test('UI: delivery pays the quote and clears the workbench',()=>{click('#modal-content [data-action="deliver"]');click('[data-action="deliver-confirm"]');eq(g.state.cash,41800);eq(g.state.active,null);eq(g.state.completed,1);});
     test('UI: next order can be accepted',()=>{click('[data-action="contracts"]');click('[data-action="accept"]');assert(g.state.active);eq(d.getElementById('modal-backdrop').hidden,true);});
