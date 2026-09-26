@@ -45,7 +45,7 @@ export function buildMicroDetail({pc,board,parts,renderer,materials,box,cylinder
   ctx.strokeStyle='rgba(194,215,199,.5)';ctx.fillStyle='rgba(209,221,205,.65)';ctx.lineWidth=1.1;ctx.font='11px monospace';
   for(let i=0;i<300;i++){const x=25+rand()*1940,y=25+rand()*1950;ctx.strokeRect(x,y,18+rand()*20,12);ctx.fillText((i%3===0?'R':i%3===1?'C':'U')+(101+i),x,y-3);if(i%5===0)ctx.fillText('+',x-9,y+10);}
   ctx.font='bold 25px monospace';ctx.fillText('B650-A  /  REV 1.02',130,1910);ctx.font='15px monospace';ctx.fillText('RoHS   Pb FREE   ESD SENSITIVE',130,1945);ctx.fillText('ENGINEERED FOR PRECISION',980,90);
-  const printTexture=new THREE.CanvasTexture(print);printTexture.colorSpace=THREE.SRGBColorSpace;printTexture.anisotropy=16;
+  const printTexture=new THREE.CanvasTexture(print);printTexture.colorSpace=THREE.SRGBColorSpace;printTexture.anisotropy=renderer.capabilities.getMaxAnisotropy();
   const markings=new THREE.Mesh(new THREE.PlaneGeometry(2.7,2.77),new THREE.MeshBasicMaterial({map:printTexture,transparent:true,depthWrite:false,side:THREE.DoubleSide}));markings.position.set(-.16,2.63,-.745);board.add(markings);
   // CMOS cell with embossed voltage marking and a curved retaining clip.
   cylinder(board,.143,.024,.52,1.67,-.676,silver);ring(board,.151,.018,.52,1.67,-.659,edge);
@@ -123,7 +123,7 @@ export function buildMicroDetail({pc,board,parts,renderer,materials,box,cylinder
       const color=!known?0x536573:fault?0xff493b:key==='cpu'?0xa1d839:0x38bdd1;
       heatMeshes[key].material.color.setHex(color);heatMeshes[key].position.copy(heatMeshes[key].userData.base).add(parts[key].position);
       heatMeshes[key].material.opacity=thermal?(.47+Math.sin(t*2+i)*.04):0;
-    });lineGeometry.attributes.position.needsUpdate=true;assemblyLines.computeLineDistances();
+    });if(assemblyLines.visible){lineGeometry.attributes.position.needsUpdate=true;assemblyLines.computeLineDistances();}
     rgbMaterials.forEach((m,i)=>{if(rgbMode===0)m.emissive.setHSL(.51+i*.1,.85,.5);else if(rgbMode===1)m.emissive.setHSL((t*.05+i*.15)%1,.92,.48);else if(rgbMode===2)m.emissive.set(0xdbedee);else m.emissive.set(0x000000);});
   }
   return {update,offsets,origins,instances,setRGB(mode){rgbMode=mode;},get explosion(){return explosion;}};

@@ -318,7 +318,8 @@ function startScene() {
     const text=!known?'--°':faulty?'98°':'38°';
     if(tempLabel.userData.text!==text){tempLabel.userData.text=text;const canvas=tempLabel.material.map.image,ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle=!known?'#7d98a0':faulty?'#f7ab78':'#a4eac6';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 60px Arial';ctx.fillText(text,512,65);tempLabel.material.map.needsUpdate=true;}
   }
-  updateState();window.addEventListener('rig-state',updateState);window.addEventListener('rig-ready',updateState);
+  function clearInspectionWithoutJob(){if(window.RigGame?.state&&!window.RigGame.state.active&&(inspection.macro||inspection.exploded||inspection.thermal)){inspection.macro=inspection.exploded=inspection.thermal=false;resetCamera();}}
+  updateState();window.addEventListener('rig-state',()=>{updateState();clearInspectionWithoutJob();});window.addEventListener('rig-ready',updateState);
   window.addEventListener('rig-select',e=>{selected=e.detail;repairPulse=.4;if(inspection.macro)focusComponent();});
   window.addEventListener('rig-repair',e=>{selected=e.detail;repairPulse=1.7;});
   window.addEventListener('rig-clean',()=>{dust.visible=false;});

@@ -286,7 +286,7 @@
   $('tool-panel').onclick = () => busy ? null : !state().active ? showContracts() : act(() => game.panel(), open => toast(open ? '電源を切断し、サイドパネルを外しました。内部を修理できます。' : 'パネルを取り付けました。起動テストができます。'));
   $('tool-clean').onclick = () => busy ? null : !state().active ? showContracts() : act(() => game.clean(), () => { toast('内部のホコリを除去しました。納品時に +¥500。'); window.dispatchEvent(new Event('rig-clean')); });
   $('end-day-button').onclick = guard(endDayConfirm); $('open-contracts-button').onclick = guard(showContracts); $('help-button').onclick = guard(showHelp); $('settings-button').onclick = guard(showSettings);
-  $('modal-close').onclick = closeModal; $('modal-backdrop').addEventListener('click',e => { if (e.target === $('modal-backdrop')) closeModal(); });
+  $('modal-close').onclick = closeModal; let backdropPress = false; $('modal-backdrop').addEventListener('pointerdown', e => { backdropPress = e.target === $('modal-backdrop'); }); $('modal-backdrop').addEventListener('click',e => { if (e.target === $('modal-backdrop') && backdropPress) closeModal(); backdropPress = false; });
   $('labels-button').onclick = guard(() => { state().settings.labels = !state().settings.labels; changed(); });
   $('view-side').onclick = () => window.dispatchEvent(new CustomEvent('rig-view', {detail:'side'}));
   $('view-front').onclick = () => window.dispatchEvent(new CustomEvent('rig-view', {detail:'front'}));
