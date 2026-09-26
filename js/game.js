@@ -43,8 +43,18 @@
   const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.chip}</svg>`;
   function paintIcons(root = document) { root.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); }); }
   const qaMode = new URLSearchParams(location.search).get('qa') === '1';
-  let stored = null, saveFailed = false;
-  try { if (!qaMode) stored = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (_) { /* Start a new local game if storage is unavailable. */ }
+  let stored = null, saveFailed = false, saveLocked = false;
+  try {
+    if (!qaMode) {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw !== null) {
+        try { stored = JSON.parse(raw); }
+        catch (_) { try { localStorage.setItem(SAVE_KEY + '-corrupt-backup', raw); } catch (__) { /* best effort */ } stored = null; }
+      }
+      // A save written by a newer build must never be replaced by a fresh game.
+      if (stored && typeof stored === 'object' && typeof stored.version === 'number' && stored.version > 1) saveLocked = true;
+    }
+  } catch (_) { /* Start a new local game if storage is unavailable. */ }
   const game = new RepairGame(stored);
   let selected = 'cpu', modalType = '', busy = false, lastFocus = null, audioContext, specialistCleanup = null;
   const state = () => game.state;
@@ -60,11 +70,12 @@
     } catch (_) { /* Audio is optional. */ }
   }
   function toast(message, error = false) {
-    const el = document.createElement('div'); el.className = 'toast' + (error ? ' error' : ''); el.textContent = message; $('toast-region').append(el);
+    const region = $('toast-region'); while (region.children.length >= 3) region.firstElementChild.remove();
+    const el = document.createElement('div'); el.className = 'toast' + (error ? ' error' : ''); el.setAttribute('role', error ? 'alert' : 'status'); el.textContent = message; region.append(el);
     setTimeout(() => { el.classList.add('fade'); setTimeout(() => el.remove(), 350); }, 4200);
   }
   function save() {
-    if (qaMode) return;
+    if (qaMode || saveLocked) return;
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(state())); $('save-status').innerHTML = 'SAVED <span class="live-dot"></span>'; }
     catch (_) { $('save-status').textContent = '保存不可'; if (!saveFailed) toast('ブラウザの保存領域を利用できません。このタブを閉じると進行が失われます。', true); saveFailed = true; }
   }
@@ -86,7 +97,9 @@
     $('xp-label').textContent = `${s.completed % 3} / 3 件`; $('xp-progress').style.width = (s.completed % 3) / 3 * 100 + '%';
     $('shop-level-title').textContent = game.level === 1 ? '小さな工房、大きな可能性。' : 'あなたの技術が、街を支えている。';
     $('shop-level-copy').textContent = game.level === 1 ? `あと${3 - s.completed % 3}件の修理で、ハイエンド依頼を解放。` : `あと${3 - s.completed % 3}件の修理でランクアップ。`;
-    const offers = game.offers(); $('available-count').textContent = offers.length; $('nav-count').textContent = offers.length;
+    const offers = game.offers(); $('available-count').textContent = offers.length; $('nav-count').textContent = offers.length; $('nav-count').hidden = !offers.length;
+    const openBadge = document.querySelector('.open-badge'); if (openBadge) openBadge.textContent = s.minute >= 1080 ? '営業時間外' : '営業中';
+    const jobBadge = document.querySelector('#job-panel .outline-badge'); if (jobBadge) jobBadge.textContent = !j ? 'STANDBY' : j.tested ? 'READY' : 'IN PROGRESS';
     $('panel-tool-label').textContent = j && j.panelOpen ? 'パネルを戻す' : 'パネルを外す';
     $('labels-button').setAttribute('aria-pressed', s.settings.labels);
     { const words = String(j ? j.name : 'WORKBENCH 01').split(' '), tail = words.length > 1 ? words.pop() : ''; $('pc-name').innerHTML = esc(words.join(' ')) + (tail ? ` <span>${esc(tail)}</span>` : ''); }
@@ -120,13 +133,13 @@
     if (!state().active) { showContracts(); return; }
     if (!own(PARTS, key)) key = 'cpu';
     selected = key; const p = PARTS[key], j = state().active, known = j.diagnosed.includes(key), faulty = j.faults.includes(key) && !j.repaired.includes(key), fixed = j.repaired.includes(key);
-    setModal(p.name, 'COMPONENT / INSPECTION', `<div class="diagnostic-header"><span class="part-card-icon" data-icon="${p.icon}"></span><div><h3>${p.short} <span style="color:var(--muted);font-weight:400">${fixed ? 'REPAIRED' : known ? faulty ? 'FAULT DETECTED' : 'HEALTHY' : 'UNKNOWN'}</span></h3><p>${p.model}</p></div></div><div class="spec-grid"><div><small>規格・スペック</small><strong>${p.spec}</strong></div><div><small>測定値</small><strong>${!known ? '未診断' : faulty ? key === 'cpu' ? '98°C / THROTTLING' : 'ERROR DETECTED' : p.normal}</strong></div><div><small>ステータス</small><strong>${!known ? '検査が必要です' : faulty ? '⚠ 故障を検出' : '✓ 正常に動作'}</strong></div><div><small>ケースの状態</small><strong>${j.panelOpen ? 'パネル取り外し済み' : 'パネル取り付け済み'}</strong></div></div><div class="fault-note ${!known ? 'unknown-note' : faulty ? '' : 'success-note'}">${!known ? 'まだ診断されていません。診断を実行して、パーツの状態を確かめましょう。' : faulty ? p.fault : fixed ? '修理が完了しました。パネルを戻して起動テストを行いましょう。' : '異常は見つかりませんでした。不要な交換は利益を減らします。ほかのパーツを調べましょう。'}</div><div class="action-row"><button class="secondary-button" data-action="diagnose-part" data-key="${key}">${icon('scan')} 個別診断 · ${state().upgrades.diagnostic ? 8 : 20}分</button>${known && faulty ? `<button class="primary-button" data-action="repair-menu">修理する ${icon('wrench')}</button>` : `<button class="primary-button" data-action="diagnose-all">全体診断 · ${state().upgrades.diagnostic ? 15 : 40}分</button>`}</div><p class="small-note">診断費用は無料。ゲーム内の作業時間を消費します。<br>3Dモデルをタップ、または下のパーツ名から部品を選択できます。</p>`, 'part');
+    setModal(p.name, 'COMPONENT / INSPECTION', `<div class="diagnostic-header"><span class="part-card-icon" data-icon="${p.icon}"></span><div><h3>${p.short} <span style="color:var(--muted);font-weight:400">${fixed ? 'REPAIRED' : known ? faulty ? 'FAULT DETECTED' : 'HEALTHY' : 'UNKNOWN'}</span></h3><p>${p.model}</p></div></div><div class="spec-grid"><div><small>規格・スペック</small><strong>${p.spec}</strong></div><div><small>測定値</small><strong>${!known ? '未診断' : faulty ? key === 'cpu' ? '98°C / THROTTLING' : 'ERROR DETECTED' : p.normal}</strong></div><div><small>ステータス</small><strong>${!known ? '検査が必要です' : faulty ? '⚠ 故障を検出' : '✓ 正常に動作'}</strong></div><div><small>ケースの状態</small><strong>${j.panelOpen ? 'パネル取り外し済み' : 'パネル取り付け済み'}</strong></div></div><div class="fault-note ${!known ? 'unknown-note' : faulty ? '' : 'success-note'}">${!known ? 'まだ診断されていません。診断を実行して、パーツの状態を確かめましょう。' : faulty ? p.fault : fixed ? '修理が完了しました。パネルを戻して起動テストを行いましょう。' : '異常は見つかりませんでした。不要な交換は利益を減らします。ほかのパーツを調べましょう。'}</div><div class="action-row"><button class="secondary-button" data-action="diagnose-part" data-key="${key}" ${known ? 'disabled' : ''}>${icon('scan')} ${known ? '診断済み' : `個別診断 · ${state().upgrades.diagnostic ? 8 : 20}分`}</button>${known && faulty ? `<button class="primary-button" data-action="repair-menu">修理する ${icon('wrench')}</button>` : `<button class="primary-button" data-action="diagnose-all" ${Object.keys(PARTS).every(k => j.diagnosed.includes(k)) ? 'disabled' : ''}>${Object.keys(PARTS).every(k => j.diagnosed.includes(k)) ? '全体診断済み' : `全体診断 · ${state().upgrades.diagnostic ? 15 : 40}分`}</button>`}</div><p class="small-note">診断費用は無料。ゲーム内の作業時間を消費します。<br>3Dモデルをタップ、または下のパーツ名から部品を選択できます。</p>`, 'part');
     $('modal-content').querySelector('.diagnostic-header').insertAdjacentHTML('afterend', `<div class="lab-readouts">${game.readings(key).map(r=>`<article><small>${r.label}</small><strong>${r.value}</strong></article>`).join('')}</div>`);
     $('modal-content').insertAdjacentHTML('beforeend', `<button class="secondary-button wide-button" data-action="macro-inspect">${icon('scan')} この部品を3D接写で観察</button><p class="small-note">測定値はゲーム内の診断シミュレーションです。</p>`);
   }
   function showDiagnosis() {
     const j = state().active; if (!j) return showContracts();
-    setModal('システム診断', 'DIAGNOSTICS / BENCH TEST', `<p class="modal-intro">お客様の症状から、原因を切り分けます。テスト用電源を接続して<strong>全6系統を検査</strong>。修理に必要なパーツがわかります。</p><div class="card-list">${Object.entries(PARTS).map(([k,p]) => `<button class="part-card" data-action="part" data-key="${k}" style="text-align:left;width:100%"><span class="part-card-icon" data-icon="${p.icon}"></span><span class="part-card-body"><h3>${p.name}</h3><p>${p.model}</p></span><span style="font-size:10px;color:${j.diagnosed.includes(k) && j.faults.includes(k) && !j.repaired.includes(k) ? 'var(--orange)' : 'var(--green)'}">${j.diagnosed.includes(k) ? j.faults.includes(k) && !j.repaired.includes(k) ? '要修理' : '正常' : '未診断'} ${icon('arrow-right')}</span></button>`).join('')}</div><button class="primary-button wide-button" data-action="diagnose-all">${icon('scan')} 全体診断を実行 · ${state().upgrades.diagnostic ? 15 : 40}分</button><p class="small-note">電源が入らないPCも、工房の診断装置で検査できます。</p>`, 'diagnosis');
+    setModal('システム診断', 'DIAGNOSTICS / BENCH TEST', `<p class="modal-intro">お客様の症状から、原因を切り分けます。テスト用電源を接続して<strong>全6系統を検査</strong>。修理に必要なパーツがわかります。</p><div class="card-list">${Object.entries(PARTS).map(([k,p]) => `<button class="part-card" data-action="part" data-key="${k}" style="text-align:left;width:100%"><span class="part-card-icon" data-icon="${p.icon}"></span><span class="part-card-body"><h3>${p.name}</h3><p>${p.model}</p></span><span style="font-size:10px;white-space:nowrap;color:${!j.diagnosed.includes(k) ? 'var(--muted)' : j.faults.includes(k) && !j.repaired.includes(k) ? 'var(--orange)' : 'var(--green)'}">${j.diagnosed.includes(k) ? j.faults.includes(k) ? j.repaired.includes(k) ? '修理済み' : '要修理' : '正常' : '未診断'} ${icon('arrow-right')}</span></button>`).join('')}</div><button class="primary-button wide-button" data-action="diagnose-all" ${Object.keys(PARTS).every(k => j.diagnosed.includes(k)) ? 'disabled' : ''}>${icon('scan')} ${Object.keys(PARTS).every(k => j.diagnosed.includes(k)) ? '全パーツ診断済み' : `全体診断を実行 · ${state().upgrades.diagnostic ? 15 : 40}分`}</button><p class="small-note">電源が入らないPCも、工房の診断装置で検査できます。</p>`, 'diagnosis');
   }
   function diagnoseAll() { act(() => game.diagnose(), faults => { showDiagnosis(); toast(faults.length ? `診断完了：${faults.map(k => PARTS[k].short).join('・')} に不具合を検出。パーツを選んで修理しましょう。` : '全パーツ正常です。起動テストで最終確認しましょう。'); }); }
   function repairMenu() {
@@ -176,6 +189,7 @@
     setModal('起動・安定性テスト', 'SYSTEM VALIDATION / LIVE', `<p class="modal-intro">POST → OS起動 → メモリ検査 → 100%負荷テスト。<br>ゲーム内の30分間をシミュレートしています。</p><div class="terminal" id="test-terminal"></div><div class="test-progress"><span id="test-progress"></span></div><p class="small-note" id="test-note">ベンチマークを実行しています…</p>`, 'test');
     const lines = [ ['電源ユニット / 電圧チェック', !result.faults.includes('psu')], ['POST / メモリ整合性テスト', !result.faults.includes('ram')], ['NVMe / OSブートシーケンス', !result.faults.includes('ssd')], ['GPU / 3D描画ストレステスト', !result.faults.includes('gpu')], ['CPU / 温度・冷却テスト', !result.faults.includes('cpu') && !result.faults.includes('fan')] ];
     let index = 0; const timer = setInterval(() => {
+      if (!$('test-terminal')) { clearInterval(timer); busy = false; return; }
       const [text,pass] = lines[index]; const el = document.createElement('div'); el.className = 'terminal-line ' + (pass ? 'pass' : 'fail'); el.textContent = `${pass ? '[ PASS ]' : '[ FAIL ]'}  ${text}`; $('test-terminal').append(el); index++; $('test-progress').style.width = index/lines.length*100+'%';
       if (index === lines.length) { clearInterval(timer); busy = false; $('test-note').textContent = result.pass ? 'すべてのテストに合格しました。お客様に納品できます。' : 'テスト失敗。未修理のパーツを診断・交換してください。'; const button = document.createElement('button'); button.className = 'primary-button wide-button'; button.dataset.action = result.pass ? 'deliver' : 'diagnosis'; button.textContent = result.pass ? '納品へ進む →' : '診断に戻る'; $('modal-content').append(button); sound(result.pass ? 'success' : 'tap'); }
     }, 650);
@@ -219,11 +233,11 @@
     }
   }
   function finishPrecision(auto = false, suppliedScore = null, technique = '精度ゲージ') {
-    if (!precisionTask || precisionTask.finished) return;
+    if (!precisionTask || precisionTask.finished) return false;
     let score = suppliedScore === null ? 0 : Math.max(0,Math.min(100,Math.round(suppliedScore)));
-    if (!auto && suppliedScore === null) { const needle = $('timing-needle'), track = $('timing-track'); if (!needle || !track) return; const n = needle.getBoundingClientRect(), t = track.getBoundingClientRect(); const percentage = (n.left + n.width / 2 - t.left) / t.width * 100; score = Math.max(0, Math.round(100 - Math.abs(percentage - 50) * 2)); }
+    if (!auto && suppliedScore === null) { const needle = $('timing-needle'), track = $('timing-track'); if (!needle || !track) return false; const n = needle.getBoundingClientRect(), t = track.getBoundingClientRect(); const percentage = (n.left + n.width / 2 - t.left) / t.width * 100; score = Math.max(0, Math.round(100 - Math.abs(percentage - 50) * 2)); }
     const { key, premium } = precisionTask;
-    act(() => game.repair(key, premium, score, auto?'自動作業':technique), () => {
+    return act(() => game.repair(key, premium, score, auto?'自動作業':technique), () => {
       precisionTask.finished = true; const bonus = score >= 85 ? 800 : score >= 60 ? 400 : 0;
       window.dispatchEvent(new CustomEvent('rig-repair', { detail: key }));
       setModal('修理、完了。', 'CRAFTSMANSHIP / RESULT', `<div class="report-amount"><small>${auto ? '自動作業で正常に装着しました' : '取り付け精度'}</small><strong>${auto ? 'COMPLETE' : score + '%'}</strong></div><div class="fault-note success-note">${PARTS[key].name} の修理が完了しました。${bonus ? `<br>精密作業ボーナス <strong>+${money(bonus)}</strong> を納品時に加算！` : ''}</div><p class="modal-intro">次は内部のクリーニング。終わったらパネルを戻して、起動テストを行いましょう。</p><button class="primary-button wide-button" data-action="close">ワークベンチへ戻る ${icon('arrow-right')}</button>`, 'repair-result');
@@ -235,7 +249,7 @@
     screw: releaseScrew, 'precision-stop': () => finishPrecision(false), 'precision-auto': () => finishPrecision(true),
     close: closeModal, help: showHelp, diagnosis: showDiagnosis, contracts: showContracts, store: () => showStore('all'), inventory: showInventory, business: showBusiness,
     part: key => setSelected(key), 'diagnose-all': diagnoseAll, 'diagnose-part': key => act(() => game.diagnose(key), () => { showPart(key); toast('個別診断が完了しました。'); }),
-    'repair-menu': repairMenu, 'repair-select': key => { selected = key; repairMenu(); }, 'panel-then-repair': () => act(() => game.panel(), repairMenu),
+    'repair-menu': repairMenu, 'repair-select': key => { selected = key; repairMenu(); }, 'panel-then-repair': () => { if (state().active?.panelOpen) return repairMenu(); act(() => game.panel(), repairMenu); },
     repair: key => startPrecision(key),
     'repair-premium': key => startPrecision(key,true),
     'store-item': key => showStore(key), 'store-filter': showStore, 'purchase-menu': purchaseMenu,
@@ -262,12 +276,13 @@
     const part = e.target.closest('[data-part]'); if (part && !busy) setSelected(part.dataset.part);
     const nav = e.target.closest('[data-nav]'); if (nav && !busy) { document.querySelectorAll('[data-nav]').forEach(b => b.classList.toggle('active', b === nav)); const key = nav.dataset.nav; if (key === 'workbench') { closeModal(); $('workbench-panel').scrollIntoView({behavior:'smooth',block:'start'}); } else actions[key](); }
   });
-  $('tool-inspect').onclick = showDiagnosis; $('tool-repair').onclick = repairMenu; $('tool-test').onclick = runTest;
+  const guard = fn => (...args) => { if (!busy) fn(...args); };
+  $('tool-inspect').onclick = guard(showDiagnosis); $('tool-repair').onclick = guard(repairMenu); $('tool-test').onclick = runTest;
   $('tool-panel').onclick = () => act(() => game.panel(), open => toast(open ? '電源を切断し、サイドパネルを外しました。内部を修理できます。' : 'パネルを取り付けました。起動テストができます。'));
   $('tool-clean').onclick = () => act(() => game.clean(), () => { toast('内部のホコリを除去しました。納品時に +¥500。'); window.dispatchEvent(new Event('rig-clean')); });
-  $('end-day-button').onclick = endDayConfirm; $('open-contracts-button').onclick = showContracts; $('help-button').onclick = showHelp; $('settings-button').onclick = showSettings;
+  $('end-day-button').onclick = guard(endDayConfirm); $('open-contracts-button').onclick = guard(showContracts); $('help-button').onclick = guard(showHelp); $('settings-button').onclick = guard(showSettings);
   $('modal-close').onclick = closeModal; $('modal-backdrop').addEventListener('click',e => { if (e.target === $('modal-backdrop')) closeModal(); });
-  $('labels-button').onclick = () => { state().settings.labels = !state().settings.labels; changed(); };
+  $('labels-button').onclick = guard(() => { state().settings.labels = !state().settings.labels; changed(); });
   $('view-side').onclick = () => window.dispatchEvent(new CustomEvent('rig-view', {detail:'side'}));
   $('view-front').onclick = () => window.dispatchEvent(new CustomEvent('rig-view', {detail:'front'}));
   $('view-reset').onclick = () => window.dispatchEvent(new Event('rig-reset-view'));
@@ -286,7 +301,10 @@
   window.RigGame = { get state() { return state(); }, get selected() { return selected; }, focus: key => { if(!busy)setSelected(key,false); }, select: key => { if (!busy && $('modal-backdrop').hidden) setSelected(key); }, toast, game };
   paintIcons(); render(); save(); window.dispatchEvent(new Event('rig-ready'));
   // An unobtrusive first-session hint keeps the actual 3D workbench visible.
-  if (!stored && !qaMode) setTimeout(() => toast('ようこそ。まずは「診断」で、最初のPCの不具合を調べましょう。'), 4800);
+  if (!stored && !qaMode) setTimeout(() => { const j = state().active; if (j && !j.diagnosed.length && $('modal-backdrop').hidden) toast('ようこそ。まずは「診断」で、最初のPCの不具合を調べましょう。'); }, 4800);
+  if (saveLocked) setTimeout(() => toast('新しいバージョンのセーブデータが見つかりました。上書きを防ぐため、この画面では保存しません。', true), 600);
+  // Another tab writing the same save would silently overwrite this session.
+  window.addEventListener('storage', e => { if (e.key === SAVE_KEY && !qaMode) toast('別のタブでセーブデータが更新されました。進行の上書きを防ぐため、どちらか一方だけで遊んでください。', true); });
   // Persistent QA/demo entry points render the real application at its real
   // viewport. These isolated sessions never read or overwrite a player's save.
   if (qaMode) {
@@ -297,7 +315,7 @@
     if (view === 'business') showBusiness();
     if (view === 'open') { game.panel(); changed(); }
     if (view === 'thermal') { game.diagnose(); changed(); }
-    if (view === 'specialist') { const key=new URLSearchParams(location.search).get('part')||'cpu';if(PARTS[key]){selected=key;game.active.faults=[key];state().inventory[PARTS[key].fix]=1;game.diagnose();game.panel();changed();startPrecision(key);startSpecialist();} }
+    if (view === 'specialist') { const key=new URLSearchParams(location.search).get('part')||'cpu';if(own(PARTS,key)){selected=key;game.active.faults=[key];state().inventory[PARTS[key].fix]=1;game.diagnose();game.panel();changed();startPrecision(key);startSpecialist();} }
     if (view === 'records') { game.diagnose(); game.panel(); changed(); showServiceRecord(); }
   }
 })();
