@@ -19,7 +19,14 @@ try {
   loading.innerHTML = '<div class="scene-error"><strong>3D表示を開始できませんでした</strong><p class="small-note">WebGLを有効にした最新版のSafari / Chromeで開いてください。<br>下のパーツボタンから修理・経営は引き続きプレイできます。</p><button class="secondary-button" onclick="location.reload()">再読み込み</button></div>';
   console.error('WebGL initialization failed', error);
 }
-if (renderer) startScene();
+function showSceneError(title, error) {
+  loading.style.display = 'flex';
+  loading.innerHTML = '<div class="scene-error"><strong>' + title + '</strong><p class="small-note">下のパーツボタンから修理・経営は引き続きプレイできます。</p><button class="secondary-button" onclick="location.reload()">再読み込み</button></div>';
+  container.dataset.ready = 'error';
+  if (error) console.error(title, error);
+}
+if (renderer) { try { startScene(); } catch (error) { renderer.setAnimationLoop(null); showSceneError('3D表示の準備中にエラーが発生しました', error); } }
+else { container.dataset.ready = 'error'; }
 function startScene() {
   // Keep native resolution on real GPUs; avoid oversized drawing buffers on CPU rasterizers.
   const glInfo=renderer.getContext(),debugInfo=glInfo.getExtension('WEBGL_debug_renderer_info');
@@ -307,8 +314,9 @@ function startScene() {
   let currentState=window.RigGame?.state,selected=window.RigGame?.selected||'cpu',panelDestination=0,repairPulse=0,powered=false,cleaned=false;
   function updateState(){
     const s=window.RigGame?.state;if(!s)return;currentState=s;selected=window.RigGame?.selected||selected;panelDestination=s.active?.panelOpen?1:0;powered=!!s.active?.powered;cleaned=!!s.active?.cleaned;dust.visible=!cleaned&&!!s.active;pc.visible=!!s.active;document.getElementById('part-tooltip').hidden=!s.settings.labels||!s.active;
-    const faulty=s.active?.faults.includes('cpu')&&!s.active?.repaired.includes('cpu');
-    const canvas=tempLabel.material.map.image,ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle=faulty?'#f7ab78':'#a4eac6';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 60px Arial';ctx.fillText(faulty?'98°':'38°',512,65);tempLabel.material.map.needsUpdate=true;
+    const known=!!s.active?.diagnosed.includes('cpu'),faulty=s.active?.faults.includes('cpu')&&!s.active?.repaired.includes('cpu');
+    const text=!known?'--°':faulty?'98°':'38°';
+    if(tempLabel.userData.text!==text){tempLabel.userData.text=text;const canvas=tempLabel.material.map.image,ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle=!known?'#7d98a0':faulty?'#f7ab78':'#a4eac6';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 60px Arial';ctx.fillText(text,512,65);tempLabel.material.map.needsUpdate=true;}
   }
   updateState();window.addEventListener('rig-state',updateState);window.addEventListener('rig-ready',updateState);
   window.addEventListener('rig-select',e=>{selected=e.detail;repairPulse=.4;if(inspection.macro)focusComponent();});
@@ -316,8 +324,9 @@ function startScene() {
   window.addEventListener('rig-clean',()=>{dust.visible=false;});
   function resetCamera(){inspection.macro=false;controls.target.set(0,inspection.exploded?2.15:1.9,inspection.exploded?.55:0);camTarget=inspection.exploded?new THREE.Vector3(8.6,5.4,12.4):defaultPosition();syncInspection();}
   window.addEventListener('rig-reset-view',resetCamera);
-  window.addEventListener('rig-view',e=>{inspection.macro=false;syncInspection();controls.target.set(0,1.95,0);camTarget=e.detail==='side'?new THREE.Vector3(0,2.95,mobile?10.7:9.3):new THREE.Vector3(mobile?10.8:9.4,3.0,.65);});
+  window.addEventListener('rig-view',e=>{inspection.macro=false;inspection.exploded=false;syncInspection();controls.target.set(0,1.95,0);camTarget=e.detail==='side'?new THREE.Vector3(0,2.95,mobile?10.7:9.3):new THREE.Vector3(mobile?10.8:9.4,3.0,.65);});
   function focusComponent(){
+    if(!detail.origins[selected])selected='cpu';
     const o=detail.origins[selected],v=detail.offsets[selected],e=inspection.exploded?1:0;
     const target=new THREE.Vector3(o[0]+v[0]*e,o[1]+v[1]*e,o[2]+v[2]*e);
     controls.target.copy(target);const distance={cpu:2.0,ram:2.8,gpu:5.0,ssd:1.8,psu:5.0,fan:6.8}[selected];
@@ -332,14 +341,14 @@ function startScene() {
   }
   function inspectionAction(name){
     if(!window.RigGame?.state.active){window.RigGame?.toast('観察するPCがありません。新しい依頼を受けてください。');return;}
-    if(name==='rgb'){inspection.rgb=(inspection.rgb+1)%4;document.getElementById('rgb-mode-label').textContent=['ICE','SPECTRUM','WHITE','OFF'][inspection.rgb];detail.setRGB(inspection.rgb);[cyan,blue,violet,green,whiteLed].forEach(m=>{if(!m.userData.baseEmission)m.userData.baseEmission={color:m.emissive.clone(),intensity:m.emissiveIntensity};m.emissive.copy(inspection.rgb===2?new THREE.Color(0xd5e5df):m.userData.baseEmission.color);m.emissiveIntensity=inspection.rgb===3?0:m.userData.baseEmission.intensity;});return;}
+    if(name==='rgb'){inspection.rgb=(inspection.rgb+1)%4;document.getElementById('rgb-mode-label').textContent=['ICE','SPECTRUM','WHITE','OFF'][inspection.rgb];document.querySelector('[data-inspection="rgb"]')?.setAttribute('aria-label','RGBライティング: '+['ICE','SPECTRUM','WHITE','OFF'][inspection.rgb]);detail.setRGB(inspection.rgb);[cyan,blue,violet,green,whiteLed].forEach(m=>{if(!m.userData.baseEmission)m.userData.baseEmission={color:m.emissive.clone(),intensity:m.emissiveIntensity};m.emissive.copy(inspection.rgb===2?new THREE.Color(0xd5e5df):m.userData.baseEmission.color);m.emissiveIntensity=inspection.rgb===3?0:m.userData.baseEmission.intensity;});return;}
     inspection[name]=!inspection[name];
     if(name==='macro'){if(inspection.macro)focusComponent();else resetCamera();}
     if(name==='exploded'){if(inspection.macro)focusComponent();else resetCamera();}
     syncInspection();
   }
   document.querySelectorAll('[data-inspection]').forEach(b=>b.addEventListener('click',()=>inspectionAction(b.dataset.inspection)));
-  document.querySelectorAll('[data-macro-step]').forEach(b=>b.addEventListener('click',()=>{const keys=Object.keys(parts),index=keys.indexOf(selected);window.RigGame?.focus(keys[(index+Number(b.dataset.macroStep)+keys.length)%keys.length]);}));
+  document.querySelectorAll('[data-macro-step]').forEach(b=>b.addEventListener('click',()=>{const keys=Object.keys(window.RepairCore?.PARTS||parts).filter(k=>parts[k]),index=Math.max(0,keys.indexOf(selected));window.RigGame?.focus(keys[(index+Number(b.dataset.macroStep)+keys.length)%keys.length]);}));
   window.addEventListener('rig-macro',()=>{inspection.macro=true;focusComponent();syncInspection();});
   window.addEventListener('rig-inspection',e=>inspectionAction(e.detail));
   controls.addEventListener('start',()=>{camTarget=null;});
@@ -349,23 +358,25 @@ function startScene() {
   displayCanvas.addEventListener('pointerdown',e=>{activePointers.add(e.pointerId);if(activePointers.size>1)multiTouch=true;if(activePointers.size===1){pointerStart={x:e.clientX,y:e.clientY,t:performance.now()};multiTouch=false;}});
   displayCanvas.addEventListener('pointerup',e=>{activePointers.delete(e.pointerId);if(multiTouch||!pointerStart||performance.now()-pointerStart.t>500||Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7){pointerStart=null;return;}pointerStart=null;const rect=displayCanvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(pickables,false);if(hits.length&&pc.visible){if(inspection.macro)window.RigGame?.focus(hits[0].object.userData.part);else window.RigGame?.select(hits[0].object.userData.part);}});
   displayCanvas.addEventListener('pointercancel',e=>{activePointers.delete(e.pointerId);pointerStart=null;});
-  renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();loading.style.display='flex';loading.innerHTML='<strong>3D表示が一時停止しました</strong><small>ページを再読み込みすると復帰できます。進行は保存済みです。</small>';});
+  window.addEventListener('pointerup',e=>{activePointers.delete(e.pointerId);if(!activePointers.size)multiTouch=false;});
+  window.addEventListener('blur',()=>{activePointers.clear();pointerStart=null;multiTouch=false;});
+  renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();renderer.setAnimationLoop(null);loading.style.display='flex';loading.innerHTML='<strong>3D表示が一時停止しました</strong><small>ページを再読み込みすると復帰できます。進行は保存済みです。</small>';});
   const tooltip=document.getElementById('part-tooltip'),tooltipText=document.getElementById('part-tooltip-text');const projected=new THREE.Vector3();
   const anchors={cpu:[-.36,3.3,.05],ram:[.85,3.49,.06],gpu:[-.1,1.96,.48],ssd:[-.82,2.37,-.42],psu:[-.65,.89,1.01],fan:[2.05,3.85,.05]};
-  const clock=new THREE.Clock();let panelProgress=0,frameCount=0,lastLoggedView='';
+  const macroLabel=document.getElementById('macro-part-label');const clock=new THREE.Clock();let panelProgress=0,frameCount=0,lastLoggedView='';
   function animate(){
     const elapsed=clock.getDelta(),dt=Math.min(elapsed,.05),t=clock.elapsedTime;
     if(camTarget){camera.position.lerp(camTarget,1-Math.exp(-Math.min(elapsed,.5)*9));if(camera.position.distanceTo(camTarget)<.015)camTarget=null;}
     controls.update();detail.update(Math.min(elapsed,.25),t,{exploded:inspection.exploded,heat:inspection.thermal,job:currentState?.active});
     panel.visible=!inspection.macro;panelProgress=THREE.MathUtils.lerp(panelProgress,inspection.exploded?1:panelDestination,1-Math.exp(-dt*5));
     inspectionLight.position.copy(camera.position);inspectionLight.intensity=inspection.light?18:0;
-    document.getElementById('macro-part-label').textContent=(window.RepairCore?.PARTS[selected]?.short||'CPU')+' / MACRO';
+    const macroText=(window.RepairCore?.PARTS[selected]?.short||'CPU')+' / MACRO';if(macroLabel.textContent!==macroText)macroLabel.textContent=macroText;
     panel.position.set(-panelProgress*1.9,panelProgress*.13,panelProgress*1.75);panel.rotation.y=-panelProgress*.27;
     // Standby RGB is powered by the workbench's isolated low-voltage lighting feed.
     for(const f of fanRotors)f.rotor.rotation.z+=dt*f.speed*(powered?9:0);
     inside.intensity=3.6+Math.sin(t*.6)*.25;
     if(repairPulse>0){repairPulse-=dt;const target=pickables.find(o=>o.userData.part===selected);if(target){highlight.box.setFromObject(target);highlight.visible=pc.visible;highlight.material.transparent=true;highlight.material.opacity=Math.min(.5,repairPulse*.7);}}else highlight.visible=false;
-    if(currentState?.settings.labels&&pc.visible){projected.set(...anchors[selected]).add(parts[selected].position).applyMatrix4(pc.matrixWorld).project(camera);const x=(projected.x*.5+.5)*container.clientWidth,y=(-projected.y*.5+.5)*container.clientHeight;tooltip.hidden=projected.z>1||x<75||x>container.clientWidth-70||y<100||y>container.clientHeight-50;if(!tooltip.hidden){tooltip.style.left=x+'px';tooltip.style.top=(y-12)+'px';tooltipText.textContent=window.RepairCore?.PARTS[selected]?.short||selected.toUpperCase();}}else tooltip.hidden=true;
+    if(currentState?.settings.labels&&pc.visible&&anchors[selected]&&parts[selected]){projected.set(...anchors[selected]).add(parts[selected].position).applyMatrix4(pc.matrixWorld).project(camera);const x=(projected.x*.5+.5)*container.clientWidth,y=(-projected.y*.5+.5)*container.clientHeight;tooltip.hidden=projected.z>1||x<75||x>container.clientWidth-70||y<100||y>container.clientHeight-50;if(!tooltip.hidden){tooltip.style.left=x+'px';tooltip.style.top=(y-12)+'px';tooltipText.textContent=window.RepairCore?.PARTS[selected]?.short||selected.toUpperCase();}}else tooltip.hidden=true;
     composer.render();
     presentFrame();
     if(!camTarget&&Math.abs(detail.explosion-(inspection.exploded?1:0))<.01)container.dataset.viewSettled=inspection.macro?'macro':inspection.exploded?'exploded':inspection.thermal?'thermal':'normal';else delete container.dataset.viewSettled;
@@ -377,4 +388,5 @@ function startScene() {
   }
   sceneInitialized=true;
   renderer.setAnimationLoop(animate);
+  document.addEventListener('visibilitychange',()=>{if(renderer.getContext().isContextLost())return;if(document.hidden)renderer.setAnimationLoop(null);else{clock.getDelta();renderer.setAnimationLoop(animate);}});
 }
