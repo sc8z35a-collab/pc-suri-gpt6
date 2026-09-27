@@ -12,9 +12,14 @@ import { buildMicroDetail } from './pc-detail.js';
 // fan blades, sleeved cables and machined chassis. No product photographs.
 const container = document.getElementById('scene-container');
 const loading = document.getElementById('scene-loading');
+// The module did load: undo the "could not load" fallback shown by game.js on slow networks.
+if (container.dataset.ready === 'error') loading.innerHTML = '<span class="loader"></span><strong>ワークベンチを準備中</strong><small>3Dパーツを組み立てています</small>';
+container.dataset.ready = 'loading';
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, // Frames are read back in the same task they are rendered, so the drawing
+  // buffer does not need to be preserved (expensive on tiled mobile GPUs).
+  preserveDrawingBuffer: false, powerPreference: 'high-performance' });
 } catch (error) {
   loading.innerHTML = '<div class="scene-error"><strong>3D表示を開始できませんでした</strong><p class="small-note">WebGLを有効にした最新版のSafari / Chromeで開いてください。<br>下のパーツボタンから修理・経営は引き続きプレイできます。</p><button class="secondary-button" onclick="location.reload()">再読み込み</button></div>';
   console.error('WebGL initialization failed', error);
@@ -32,16 +37,22 @@ function startScene() {
   const glInfo=renderer.getContext(),debugInfo=glInfo.getExtension('WEBGL_debug_renderer_info');
   const adapterName=debugInfo?String(glInfo.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)):'';
   const softwareRasterizer=/SwiftShader|llvmpipe|software rasterizer/i.test(adapterName);
-  renderer.setPixelRatio(softwareRasterizer?1:(window.devicePixelRatio||1));
+  // SSAO and bloom run per pixel: cap DPR at 2 so 3x phones do not render 2.25x
+  // more pixels than they can usefully display.
+  renderer.setPixelRatio(softwareRasterizer?1:Math.min(2,window.devicePixelRatio||1));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.3;
   renderer.setClearColor(0x101a21, 1);
   // Present complete rendered frames through a 2D surface. This avoids stale
   // or missing WebGL compositor layers while retaining the full 3D renderer.
-  const displayCanvas=document.createElement('canvas');
-  const presentation=displayCanvas.getContext('2d',{alpha:false});
+  // Hardware GPUs present the WebGL canvas directly: a full-frame readPixels
+  // every frame stalls the GPU pipeline and drains phone batteries.
+  const directPresent=!softwareRasterizer;
+  const displayCanvas=directPresent?renderer.domElement:document.createElement('canvas');
+  const presentation=directPresent?null:displayCanvas.getContext('2d',{alpha:false});
   let framePixels=null,frameImage=null,sceneInitialized=false;
   function presentFrame(){
+    if(directPresent)return;
     const fw=renderer.domElement.width,fh=renderer.domElement.height;
     if(!frameImage||frameImage.width!==fw||frameImage.height!==fh){framePixels=new Uint8Array(fw*fh*4);frameImage=presentation.createImageData(fw,fh);}
     const gl=renderer.getContext();gl.readPixels(0,0,fw,fh,gl.RGBA,gl.UNSIGNED_BYTE,framePixels);
@@ -302,7 +313,7 @@ function startScene() {
   function defaultPosition(){return mobile?new THREE.Vector3(6.55,4.05,8.8):new THREE.Vector3(5.7,3.85,7.9);}
   function resize(){
     const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;const wasMobile=mobile;mobile=w/h<1.2;
-    renderer.setSize(w,h);displayCanvas.width=renderer.domElement.width;displayCanvas.height=renderer.domElement.height;composer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();
+    renderer.setSize(w,h,!directPresent);if(!directPresent){displayCanvas.width=renderer.domElement.width;displayCanvas.height=renderer.domElement.height;}composer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();
     if(sceneInitialized){
       if(inspection.macro){focusComponent();camera.position.copy(camTarget);camTarget=null;}
       else if(wasMobile!==mobile){if(inspection.exploded){camera.position.set(8.6,5.4,12.4);controls.target.set(0,2.15,.55);}else{camera.position.copy(defaultPosition());controls.target.set(0,1.9,0);}camTarget=null;}
@@ -341,6 +352,7 @@ function startScene() {
     document.getElementById('stage').classList.toggle('macro-active',inspection.macro);
   }
   function inspectionAction(name){
+    if(container.dataset.ready!=='true')return; // game.js explains why the tools are unavailable
     if(!window.RigGame?.state.active){window.RigGame?.toast('観察するPCがありません。新しい依頼を受けてください。');return;}
     if(name==='rgb'){inspection.rgb=(inspection.rgb+1)%4;document.getElementById('rgb-mode-label').textContent=['ICE','SPECTRUM','WHITE','OFF'][inspection.rgb];document.querySelector('[data-inspection="rgb"]')?.setAttribute('aria-label','RGBライティング: '+['ICE','SPECTRUM','WHITE','OFF'][inspection.rgb]);detail.setRGB(inspection.rgb);[cyan,blue,violet,green,whiteLed].forEach(m=>{if(!m.userData.baseEmission)m.userData.baseEmission={color:m.emissive.clone(),intensity:m.emissiveIntensity};m.emissive.copy(inspection.rgb===2?new THREE.Color(0xd5e5df):m.userData.baseEmission.color);m.emissiveIntensity=inspection.rgb===3?0:m.userData.baseEmission.intensity;});return;}
     inspection[name]=!inspection[name];
@@ -361,7 +373,9 @@ function startScene() {
   displayCanvas.addEventListener('pointercancel',e=>{activePointers.delete(e.pointerId);pointerStart=null;});
   window.addEventListener('pointerup',e=>{activePointers.delete(e.pointerId);if(!activePointers.size)multiTouch=false;});
   window.addEventListener('blur',()=>{activePointers.clear();pointerStart=null;multiTouch=false;});
-  renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();renderer.setAnimationLoop(null);loading.style.display='flex';loading.innerHTML='<strong>3D表示が一時停止しました</strong><small>ページを再読み込みすると復帰できます。進行は保存済みです。</small>';});
+  renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();renderer.setAnimationLoop(null);container.dataset.ready='lost';loading.style.display='flex';loading.innerHTML='<div class="scene-error"><strong>3D表示が一時停止しました</strong><p class="small-note">GPUのリセットを待っています。復帰しない場合は再読み込みしてください。進行は保存済みです。</p><button class="secondary-button" onclick="location.reload()">再読み込み</button></div>';});
+  // three.js re-uploads textures and render targets; resume the loop.
+  renderer.domElement.addEventListener('webglcontextrestored',()=>{loading.style.display='none';container.dataset.ready='true';clock.getDelta();if(!document.hidden)renderer.setAnimationLoop(animate);});
   const tooltip=document.getElementById('part-tooltip'),tooltipText=document.getElementById('part-tooltip-text');const projected=new THREE.Vector3();
   const anchors={cpu:[-.36,3.3,.05],ram:[.85,3.49,.06],gpu:[-.1,1.96,.48],ssd:[-.82,2.37,-.42],psu:[-.65,.89,1.01],fan:[2.05,3.85,.05]};
   const macroLabel=document.getElementById('macro-part-label');const clock=new THREE.Clock();let panelProgress=0,frameCount=0,lastLoggedView='';

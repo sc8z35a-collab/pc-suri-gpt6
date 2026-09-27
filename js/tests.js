@@ -3,11 +3,13 @@
   'use strict';
   const { RepairGame, initialState, PARTS, CATALOG } = window.RepairCore;
   let passed = 0, failed = 0;
+  // ?quiet=1 logs only failures and the summary (for console-capped runners).
+  const quiet = new URLSearchParams(location.search).get('quiet') === '1';
   const results = document.getElementById('results');
   const assert = (value, label) => { if (!value) throw new Error(label || 'Assertion failed'); };
   const eq = (a,b) => assert(a === b, `Expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
   const throws = fn => { let thrown = false; try { fn(); } catch (_) { thrown = true; } assert(thrown, 'Expected operation to be rejected'); };
-  function test(name, fn) { try { fn(); passed++; results.textContent += `PASS ${name}\n`; console.info('PASS ' + name); } catch (e) { failed++; results.textContent += `FAIL ${name}: ${e.message}\n`; console.error('FAIL ' + name + ': ' + e.message); } }
+  function test(name, fn) { try { fn(); passed++; results.textContent += `PASS ${name}\n`; if (!quiet) console.info('PASS ' + name); } catch (e) { failed++; results.textContent += `FAIL ${name}: ${e.message}\n`; console.error('FAIL ' + name + ': ' + e.message); } }
   const complete = (g, precision = 0) => { g.diagnose(); g.panel(); g.repair('cpu', false, precision); g.clean(); g.panel(); g.test(); return g.deliver(); };
   test('Initial capital, starter inventory and first job', () => { const g = new RepairGame(); eq(g.state.cash,32000); eq(g.state.minute,540); eq(g.active.id,'0042'); eq(g.state.inventory.paste,2); });
   test('Full diagnostic detects CPU fault and consumes 40 minutes', () => { const g = new RepairGame(); eq(g.diagnose().join(','),'cpu'); eq(g.state.minute,580); eq(g.active.diagnosed.length,6); });
@@ -57,6 +59,21 @@
   test('Bugfix: loan never exceeds the 30000 credit line',()=>{const g=new RepairGame();g.state.debt=25000;eq(g.loan(),5000);eq(g.state.debt,30000);throws(()=>g.loan());});
   test('Bugfix: new day starts with empty daily totals',()=>{const g=new RepairGame();g.transaction('入金',5000);g.closeDay();eq(g.dailyTotals.income,0);eq(g.dailyTotals.day,2);});
   test('Bugfix: nextId never collides with archived job ids',()=>{const g=new RepairGame({...initialState(),nextId:40,serviceArchives:[{id:'0050',records:[]}]});assert(g.state.nextId>50);});
+  test('v1.2: non-string job text from a save falls back to the template',()=>{const g=new RepairGame({...initialState(),active:{...initialState().active,title:{x:1},customer:42,symptom:null}});eq(typeof g.active.title,'string');eq(g.active.customer,'佐藤 翔太');});
+  test('v1.2: repaired parts are always marked diagnosed',()=>{const g=new RepairGame({...initialState(),active:{...initialState().active,repaired:['cpu'],diagnosed:[]}});assert(g.active.diagnosed.includes('cpu'));});
+  test('v1.2: saved bonuses cannot exceed repaired parts',()=>{const g=new RepairGame({...initialState(),active:{...initialState().active,premium:99,precisionBonus:999999,repaired:[]}});eq(g.active.premium,0);eq(g.active.precisionBonus,0);});
+  test('v1.2: negative saved cash is clamped to zero',()=>{const g=new RepairGame({...initialState(),cash:-5000});eq(g.state.cash,0);});
+  test('v1.2: archived records and daily reports are sanitised',()=>{const g=new RepairGame({...initialState(),serviceArchives:[{id:'<b>',day:'<img>',records:[{day:'x',action:{},part:'__proto__',details:5}]}],days:[{day:'<i>',revenue:'x'}]});const a=g.state.serviceArchives[0];eq(a.id,'----');eq(a.day,1);eq(a.records[0].part,null);eq(typeof a.records[0].action,'string');eq(g.state.days[0].day,1);eq(g.state.days[0].revenue,0);});
+  test('v1.2: unknown top-level save fields are dropped',()=>{const g=new RepairGame({...initialState(),junk:'x'.repeat(1000)});eq(g.state.junk,undefined);});
+  test('v1.2: stale accepted keys from other days are discarded',()=>{const g=new RepairGame({...initialState(),day:3,accepted:['1-0','3-2','3-2']});eq(g.state.accepted.join(),'3-2');});
+  test('v1.2: daily totals from another day are rebuilt',()=>{const g=new RepairGame({...initialState(),day:2,dailyTotals:{day:1,income:9999,outgoing:0,revenue:9999}});eq(g.dailyTotals.income,0);});
+  test('v1.2: cancellation with no cash and exhausted credit is deferred, not blocked',()=>{const g=new RepairGame();g.state.cash=200;g.state.debt=30000;g.abandon();eq(g.state.active,null);eq(g.state.cash,0);eq(g.state.debt,30800);});
+  test('v1.2: cancellation still requires funds while credit remains',()=>{const g=new RepairGame();g.state.cash=200;throws(()=>g.abandon());assert(g.state.active);});
+  test('v1.2: a needed part can be bought on credit only when completely broke',()=>{const g=new RepairGame();g.active.faults=['ssd'];g.diagnose();g.state.cash=500;assert(!g.canBuyOnCredit('ssd'));g.state.debt=30000;assert(g.canBuyOnCredit('ssd'));assert(!g.canBuyOnCredit('ssd',true));assert(!g.canBuyOnCredit('gpu'));eq(g.buy('ssd'),true);eq(g.state.inventory.ssd,1);eq(g.state.cash,0);eq(g.state.debt,35300);assert(!g.canBuyOnCredit('ssd'));});
+  test('v1.2: partial repayment uses available cash',()=>{const g=new RepairGame();g.state.debt=10000;g.state.cash=3000;eq(g.repay(),3000);eq(g.state.debt,7000);eq(g.state.cash,0);throws(()=>g.repay());});
+  test('v1.2: loan repayment is not counted as an operating expense',()=>{const g=new RepairGame();g.loan();const e=g.state.expenses;g.repay();eq(g.state.expenses,e);});
+  test('v1.2: accepted jobs do not store offer bookkeeping keys',()=>{const g=new RepairGame();g.state.active=null;g.accept(g.offers()[0].key);eq(g.active.key,undefined);eq(g.active.index,undefined);});
+  test('v1.2: numeric job ids from a save are kept',()=>{const g=new RepairGame({...initialState(),active:{...initialState().active,id:77}});eq(g.active.id,'0077');assert(g.state.nextId>77);});
   const waitFor = async (fn, timeout=30000) => { const start=Date.now(); while (!fn()) { if(Date.now()-start>timeout)throw new Error('UI wait timed out'); await new Promise(r=>setTimeout(r,70)); } };
   try {
     const frame=document.getElementById('test-app');
@@ -92,6 +109,11 @@
     test('Bugfix UI: bottom navigation highlights the open menu',()=>{click('[data-nav="store"]');assert(d.querySelector('[data-nav="store"]').classList.contains('active'));click('[data-action="purchase-menu"][data-key="fan"]');assert(d.querySelector('[data-nav="store"]').classList.contains('active'));click('#modal-close');assert(d.querySelector('[data-nav="workbench"]').classList.contains('active'));});
     test('Bugfix UI: settings switches expose checked state',()=>{click('#settings-button');const sw=d.querySelector('[data-action="toggle-labels"]');eq(sw.getAttribute('role'),'switch');const before=sw.getAttribute('aria-checked');click('[data-action="toggle-labels"]');assert(d.querySelector('[data-action="toggle-labels"]').getAttribute('aria-checked')!==before);click('[data-action="toggle-labels"]');click('#modal-close');});
     test('Bugfix UI: prototype-named actions are ignored safely',()=>{const b=d.createElement('button');b.dataset.action='constructor';d.body.append(b);b.click();b.remove();assert(w.RigGame.state);});
+    test('v1.2 UI: component chips keep focus across re-renders',()=>{if(!d.getElementById('modal-backdrop').hidden)click('#modal-close');const chip=d.querySelector('[data-part="ram"]');chip.focus();w.RigGame.focus('ram');eq(d.activeElement,chip);assert(chip.getAttribute('aria-label').includes('メモリ'));});
+    test('v1.2 UI: loan confirmation shows the real remaining credit',()=>{const debt=g.state.debt;g.state.debt=25000;click('[data-nav="business"]');click('[data-action="loan-confirm"]');assert(d.getElementById('modal-content').textContent.includes('¥5,000'));g.state.debt=debt;click('#modal-close');});
+    test('v1.2 UI: purchase is disabled once the working day is over',()=>{const m=g.state.minute;g.state.minute=1075;click('[data-nav="store"]');click('[data-action="purchase-menu"][data-key="paste"]');assert(d.querySelector('[data-action="buy"][data-key="paste"]').disabled);g.state.minute=m;click('#modal-close');});
+    test('v1.2 UI: repair result points to the next remaining fault',()=>{if(!d.getElementById('modal-backdrop').hidden)click('#modal-close');g.state.minute=540;g.active.faults=['cpu','ram'];g.active.repaired=[];g.active.diagnosed=Object.keys(PARTS);g.active.panelOpen=true;g.active.powered=false;g.state.inventory.paste=1;g.state.inventory.ram=1;w.RigGame.focus('cpu');click('#tool-repair');click('[data-action="repair-select"][data-key="cpu"]');click('[data-action="repair"]');click('[data-action="precision-auto"]');assert(d.getElementById('modal-content').textContent.includes('RAM'));assert(d.querySelector('#modal-content [data-action="repair-menu"]'));click('#modal-close');});
+    test('v1.2 UI: delivery preview shows no minus sign for zero penalty',()=>{const j=g.active;const t=j.tested,p=j.panelOpen,r=j.repaired;j.repaired=j.faults.slice();j.panelOpen=false;j.tested=true;click('#tool-test');const line=[...d.querySelectorAll('.receipt-line')].find(l=>l.textContent.includes('納期超過'));assert(line&&!line.textContent.includes('−'));j.tested=t;j.panelOpen=p;j.repaired=r;click('#modal-close');});
     await waitFor(()=>d.getElementById('scene-container').dataset.ready==='true',60000);
     test('3D: more than 6000 additional physical micro-details are loaded',()=>{assert(Number(d.getElementById('scene-container').dataset.microInstances)>6000);});
     test('3D: macro mode and part navigation do not spend game resources',()=>{click('#modal-close');const before=JSON.stringify(g.state);click('[data-inspection="macro"]');eq(d.getElementById('macro-hud').hidden,false);click('[data-macro-step="1"]');eq(JSON.stringify(g.state),before);});

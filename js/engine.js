@@ -43,19 +43,39 @@
     for (const key of Object.keys(CATALOG)) if (has(raw, key)) { const n = int(raw[key], 0, 0); if (n > 0) stock[key] = n; }
     return stock;
   }
+  const TEXT_FIELDS = ['title', 'customer', 'initial', 'type', 'symptom', 'name', 'tier'];
+  const normalizeId = (id, fallback) => typeof id === 'string' && /^[0-9A-Za-z-]{1,12}$/.test(id) ? id : Number.isInteger(id) && id >= 0 ? String(id).padStart(4, '0') : fallback;
+  const text = (value, fallback = '') => typeof value === 'string' ? value.slice(0, 300) : fallback;
+  // Work-log entries are rendered in the service record; keep only well-formed fields.
+  function normalizeLog(list) {
+    if (!Array.isArray(list)) return [];
+    return list.filter(isObject).map(l => ({ day: int(l.day, 1, 1), minute: int(l.minute, 540, 0, 1440), action: text(l.action, '作業'), part: has(PARTS, l.part) ? l.part : null, details: text(l.details) }));
+  }
+  function normalizeReport(r) {
+    const n = key => int(r[key], 0);
+    return { day: int(r.day, 1, 1), revenue: n('revenue'), otherIncome: n('otherIncome'), expenses: n('expenses'), profit: n('profit'), rent: n('rent'), interest: n('interest'), deferred: n('deferred') };
+  }
+  function normalizeArchive(a) {
+    return { id: normalizeId(a.id, '----'), name: text(a.name, 'UNKNOWN'), title: text(a.title), customer: text(a.customer, '—'), day: int(a.day, 1, 1), total: int(a.total, 0), ...(a.cancelled === true ? { cancelled: true } : {}), records: normalizeLog(a.records).slice(-100) };
+  }
   function normalizeJob(raw) {
     if (!isObject(raw)) return null;
     const template = TEMPLATES.find(t => t.name === raw.name) || TEMPLATES[0];
     const parts = list => (Array.isArray(list) ? [...new Set(list.filter(k => has(PARTS, k)))] : []);
     const job = { ...clone(template), ...clone(raw) };
+    // Text shown to the player must be text; objects or numbers fall back to the template.
+    for (const field of TEXT_FIELDS) job[field] = typeof raw[field] === 'string' && raw[field] ? raw[field].slice(0, 200) : template[field];
     job.faults = parts(raw.faults); if (!job.faults.length) job.faults = template.faults.slice();
     job.diagnosed = parts(raw.diagnosed); job.repaired = parts(raw.repaired).filter(k => job.faults.includes(k));
+    // A part cannot have been repaired without having been diagnosed first.
+    for (const k of job.repaired) if (!job.diagnosed.includes(k)) job.diagnosed.push(k);
     for (const flag of ['panelOpen', 'tested', 'cleaned', 'powered']) job[flag] = raw[flag] === true;
     job.reward = int(raw.reward, template.reward, 0); job.days = int(raw.days, template.days, 0);
     job.acceptedDay = int(raw.acceptedDay, 1, 1); job.due = int(raw.due, job.acceptedDay + job.days, 1);
-    job.premium = int(raw.premium, 0, 0); job.partCosts = int(raw.partCosts, 0, 0); job.precisionBonus = int(raw.precisionBonus, 0, 0);
-    job.id = typeof raw.id === 'string' && raw.id ? raw.id : '0042';
-    if (raw.serviceLog !== undefined) job.serviceLog = Array.isArray(raw.serviceLog) ? raw.serviceLog.filter(isObject).slice(-100) : [];
+    // Bonuses can only have been earned once per repaired part.
+    job.premium = int(raw.premium, 0, 0, job.repaired.length); job.partCosts = int(raw.partCosts, 0, 0); job.precisionBonus = int(raw.precisionBonus, 0, 0, job.repaired.length * 800);
+    job.id = normalizeId(raw.id, '0042');
+    if (raw.serviceLog !== undefined) job.serviceLog = normalizeLog(raw.serviceLog).slice(-100);
     if (job.faults.some(k => !job.repaired.includes(k))) job.tested = false;
     if (job.panelOpen) { job.tested = false; job.powered = false; }
     return job;
@@ -65,23 +85,27 @@
   function normalizeState(raw) {
     const base = initialState();
     if (!isObject(raw) || raw.version !== 1) return base;
-    const s = clone(raw);
+    // Only known fields are carried over; unknown junk is not persisted forever.
+    const s = {};
     s.version = 1;
+    for (const key of ['day', 'minute', 'cash', 'rep', 'completed', 'revenue', 'expenses', 'debt', 'nextId']) s[key] = raw[key];
     s.day = int(s.day, 1, 1); s.minute = int(s.minute, 540, 540, 1080);
-    s.cash = int(s.cash, base.cash); s.rep = Math.round(Math.max(1, Math.min(5, finite(s.rep, base.rep))) * 100) / 100;
-    s.completed = int(s.completed, 0, 0); s.revenue = int(s.revenue, 0); s.expenses = int(s.expenses, 0); s.debt = int(s.debt, 0, 0);
+    s.cash = int(s.cash, base.cash, 0); s.rep = Math.round(Math.max(1, Math.min(5, finite(s.rep, base.rep))) * 100) / 100;
+    s.completed = int(s.completed, 0, 0); s.revenue = int(s.revenue, 0, 0); s.expenses = int(s.expenses, 0, 0); s.debt = int(s.debt, 0, 0);
     s.upgrades = Object.fromEntries(Object.keys(base.upgrades).map(k => [k, isObject(raw.upgrades) && raw.upgrades[k] === true]));
     s.inventory = isObject(raw.inventory) ? normalizeStock(raw.inventory) : base.inventory;
     s.premiumStock = normalizeStock(raw.premiumStock);
     s.active = raw.active === null ? null : raw.active === undefined ? base.active : normalizeJob(raw.active);
-    s.accepted = Array.isArray(raw.accepted) ? raw.accepted.filter(k => typeof k === 'string') : [];
-    s.ledger = Array.isArray(raw.ledger) ? raw.ledger.filter(l => isObject(l) && typeof l.label === 'string' && Number.isFinite(l.amount)).slice(0, 60) : [];
-    s.days = Array.isArray(raw.days) ? raw.days.filter(isObject).slice(-14) : [];
+    // Accepted offer keys only matter for the current day.
+    s.accepted = Array.isArray(raw.accepted) ? [...new Set(raw.accepted.filter(k => typeof k === 'string' && k.startsWith(s.day + '-')))] : [];
+    s.ledger = Array.isArray(raw.ledger) ? raw.ledger.filter(l => isObject(l) && typeof l.label === 'string' && Number.isFinite(l.amount)).slice(0, 60).map(l => ({ day: int(l.day, s.day, 1), label: l.label.slice(0, 120), amount: Math.round(l.amount) })) : [];
+    s.days = Array.isArray(raw.days) ? raw.days.filter(isObject).slice(-14).map(normalizeReport) : [];
     s.settings = { sound: !(isObject(raw.settings) && raw.settings.sound === false), labels: !(isObject(raw.settings) && raw.settings.labels === false) };
-    const usedIds = [s.active, ...(Array.isArray(raw.serviceArchives) ? raw.serviceArchives : [])].map(j => Number(j && j.id)).filter(Number.isFinite);
+    if (raw.serviceArchives !== undefined) s.serviceArchives = Array.isArray(raw.serviceArchives) ? raw.serviceArchives.filter(isObject).slice(0, 25).map(normalizeArchive) : [];
+    const usedIds = [s.active, ...(s.serviceArchives || [])].map(j => Number(j && j.id)).filter(Number.isFinite);
     s.nextId = Math.max(int(s.nextId, 43, 1), ...usedIds.map(n => n + 1));
-    if (raw.serviceArchives !== undefined) s.serviceArchives = Array.isArray(raw.serviceArchives) ? raw.serviceArchives.filter(isObject).map(a => ({ ...a, records: Array.isArray(a.records) ? a.records : [] })).slice(0, 25) : [];
-    if (!isObject(raw.dailyTotals) || ![raw.dailyTotals.income, raw.dailyTotals.outgoing, raw.dailyTotals.revenue].every(Number.isFinite)) delete s.dailyTotals;
+    const totals = raw.dailyTotals;
+    if (isObject(totals) && totals.day === s.day && [totals.income, totals.outgoing, totals.revenue].every(v => Number.isFinite(v) && v >= 0)) s.dailyTotals = { day: s.day, income: Math.round(totals.income), outgoing: Math.round(totals.outgoing), revenue: Math.round(totals.revenue) };
     return s;
   }
   class RepairGame {
@@ -115,7 +139,8 @@
       if (this.state.cash + amount < 0) throw new Error('所持金が足りません。経営メニューで融資を受けられます。');
       const totals = this.dailyTotals;
       this.state.cash += amount;
-      if (amount < 0) { this.state.expenses -= amount; totals.outgoing -= amount; } else totals.income += amount;
+      // Repaying loan principal is a cash outflow but not an operating expense.
+      if (amount < 0) { if (label !== '融資返済') this.state.expenses -= amount; totals.outgoing -= amount; } else totals.income += amount;
       if (label.startsWith('修理納品')) totals.revenue += amount;
       this.state.ledger.unshift({ day: this.state.day, label, amount }); this.state.ledger = this.state.ledger.slice(0, 60);
     }
@@ -162,16 +187,43 @@
       }
       return list;
     }
-    accept(key) { if (this.state.active) throw new Error('作業台は1台です。現在の依頼を先に納品してください。'); const offer = this.offers().find(o => o.key === key); if (!offer) throw new Error('この依頼は現在受けられません。'); this.state.active = blankJob(offer, String(this.state.nextId++).padStart(4, '0'), this.state.day); this.state.accepted.push(key); return this.state.active; }
+    accept(key) { if (this.state.active) throw new Error('作業台は1台です。現在の依頼を先に納品してください。'); const offer = this.offers().find(o => o.key === key); if (!offer) throw new Error('この依頼は現在受けられません。'); const { key: _key, index: _index, ...template } = offer; this.state.active = blankJob(template, String(this.state.nextId++).padStart(4, '0'), this.state.day); this.state.accepted.push(key); return this.state.active; }
     price(item, premium = false) { if (!has(CATALOG, item)) throw new Error('商品が見つかりません。'); return Math.round(CATALOG[item].price * (premium ? 1.35 : 1) * (this.state.upgrades.supplier ? .9 : 1)); }
-    buy(item, premium = false) { if (!has(CATALOG, item)) throw new Error('商品が見つかりません。'); const price = this.price(item, premium); if (this.state.cash < price) throw new Error('所持金が足りません。経営メニューで融資を受けられます。'); this.spendTime(10); this.transaction(`${premium ? '高品質 ' : ''}${CATALOG[item].name} 仕入れ`, -price); const stock = premium ? this.state.premiumStock : this.state.inventory; stock[item] = (stock[item] || 0) + 1; }
+    // True when the shop is out of cash and credit and this standard part is the
+    // only way to finish the job on the bench (otherwise the game soft-locks).
+    canBuyOnCredit(item, premium = false) {
+      const s = this.state, job = s.active;
+      if (premium || !has(CATALOG, item) || !job || s.debt < 30000 || s.cash >= this.price(item)) return false;
+      if ((s.inventory[item] || 0) > 0 || (s.premiumStock[item] || 0) > 0) return false;
+      return job.faults.some(k => job.diagnosed.includes(k) && !job.repaired.includes(k) && PARTS[k].fix === item);
+    }
+    buy(item, premium = false) {
+      if (!has(CATALOG, item)) throw new Error('商品が見つかりません。');
+      const price = this.price(item, premium), credit = this.canBuyOnCredit(item, premium);
+      if (this.state.cash < price && !credit) throw new Error('所持金が足りません。経営メニューで融資を受けられます。');
+      this.spendTime(10);
+      if (credit) { const shortfall = price - this.state.cash; this.state.debt += shortfall; this.transaction('部品代の繰延（借入）', shortfall); }
+      this.transaction(`${premium ? '高品質 ' : ''}${CATALOG[item].name} 仕入れ`, -price);
+      const stock = premium ? this.state.premiumStock : this.state.inventory; stock[item] = (stock[item] || 0) + 1;
+      return credit;
+    }
     sell(item, premium = false) { if (!has(CATALOG, item)) throw new Error('商品が見つかりません。'); const stock = premium ? this.state.premiumStock : this.state.inventory; if (!(stock[item] > 0)) throw new Error('在庫がありません。'); stock[item]--; const value = Math.round(this.price(item, premium) * .6); this.transaction(CATALOG[item].name + ' 売却', value); return value; }
     upgrade(key) { const prices = { diagnostic: 14000, supplier: 18000, bench: 22000 }; if (!has(prices, key)) throw new Error('設備が見つかりません。'); if (this.state.upgrades[key]) throw new Error('導入済みです。'); this.transaction('工房設備投資', -prices[key]); this.state.upgrades[key] = true; }
     loan() { const amount = Math.min(10000, 30000 - this.state.debt); if (amount <= 0) throw new Error('融資上限は ¥30,000 です。不要な在庫を売却するか、依頼を完了しましょう。'); this.transaction('事業融資', amount); this.state.debt += amount; return amount; }
-    repay() { const value = Math.min(this.state.debt, 10000); if (!value) throw new Error('借入金はありません。'); this.transaction('融資返済', -value); this.state.debt -= value; }
+    repay() {
+      if (!this.state.debt) throw new Error('借入金はありません。');
+      // Repay up to ¥10,000, limited by the cash actually on hand.
+      const value = Math.min(this.state.debt, 10000, this.state.cash);
+      if (value <= 0) throw new Error('返済に使える所持金がありません。');
+      this.transaction('融資返済', -value); this.state.debt -= value; return value;
+    }
     abandon() {
-      const job = this.active; if (this.state.cash < 1000) throw new Error('キャンセル料 ¥1,000 が必要です。');
-      this.transaction('依頼キャンセル料', -1000); this.state.rep = Math.max(1, Math.round((this.state.rep - .3) * 100) / 100);
+      const job = this.active, fee = 1000, shortfall = Math.max(0, fee - this.state.cash);
+      // With no cash and an exhausted credit line a stuck job could never be
+      // cancelled; the unpaid fee is deferred to debt like the daily costs.
+      if (shortfall && this.state.debt < 30000) throw new Error('キャンセル料 ¥1,000 が必要です。在庫の売却か融資で資金を用意してください。');
+      if (shortfall) { this.state.debt += shortfall; this.transaction('未払いキャンセル料の繰延（借入）', shortfall); }
+      this.transaction('依頼キャンセル料', -fee); this.state.rep = Math.max(1, Math.round((this.state.rep - .3) * 100) / 100);
       this.logWork('依頼キャンセル', null, 'キャンセル料 ¥1,000');
       this.state.serviceArchives ||= []; this.state.serviceArchives.unshift({ id: job.id, name: job.name, title: job.title, customer: job.customer, day: this.state.day, total: -1000, cancelled: true, records: clone(job.serviceLog || []) }); this.state.serviceArchives = this.state.serviceArchives.slice(0, 25);
       this.state.active = null;

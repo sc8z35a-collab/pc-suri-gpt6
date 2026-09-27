@@ -20,7 +20,7 @@
     if(key==='cpu'){
       task.innerHTML='<p class="micro-instructions">指でなぞり、銀色のヒートスプレッダを<strong>薄く均一に</strong>覆いましょう。緑色の基板にはみ出すと減点。塗布率85%以上を目指します。</p><canvas class="micro-canvas" id="paste-canvas" width="400" height="320" aria-label="指でなぞってCPU上にグリスを塗布する"></canvas><button class="secondary-button wide-button" id="paste-reset">塗布をやり直す</button>';
       const c=$('#paste-canvas'),ctx=c.getContext('2d'),paint=document.createElement('canvas');paint.width=400;paint.height=320;const p=paint.getContext('2d');
-      const cells=new Set();let strokes=0,spills=0,drawing=false,last=null;
+      const cells=new Set();let strokes=0,spills=0,drawing=false,last=null,activePointer=null;
       const bounds={x:90,y:50,w:220,h:220};
       function render(){
         ctx.fillStyle='#18362a';ctx.fillRect(0,0,400,320);ctx.strokeStyle='#49785b';ctx.lineWidth=1;
@@ -36,10 +36,12 @@
       }
       function point(e){const r=c.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*400,y:(e.clientY-r.top)/r.height*320};}
       function draw(e){const pt=point(e);if(last){const distance=Math.hypot(pt.x-last.x,pt.y-last.y),n=Math.max(1,Math.ceil(distance/5));for(let i=1;i<=n;i++)mark(last.x+(pt.x-last.x)*i/n,last.y+(pt.y-last.y)*i/n);}else mark(pt.x,pt.y);last=pt;render();const cover=cells.size/324*100;update(score.paste(cover,spills/Math.max(1,strokes)),cover>=30,cover);status(`塗布率 ${Math.round(cover)}% / はみ出し ${Math.round(spills/Math.max(1,strokes)*100)}%`);}
-      c.addEventListener('pointerdown',e=>{if(disposed||(e.pointerType==='mouse'&&e.button!==0))return;e.preventDefault();drawing=true;last=null;try{c.setPointerCapture(e.pointerId);}catch(_){}draw(e);},{signal:abort.signal});
-      c.addEventListener('pointermove',e=>{if(drawing&&!disposed)draw(e);},{signal:abort.signal});
-      for(const name of ['pointerup','pointercancel','lostpointercapture'])c.addEventListener(name,()=>{drawing=false;last=null;},{signal:abort.signal});
-      click('#paste-reset',()=>{drawing=false;last=null;cells.clear();strokes=spills=0;p.clearRect(0,0,400,320);render();update(0,false);status('新しい塗布面でやり直せます。');});render();
+      c.addEventListener('pointerdown',e=>{if(disposed||(e.pointerType==='mouse'&&e.button!==0))return;e.preventDefault();if(drawing&&activePointer!==e.pointerId)return;activePointer=e.pointerId;drawing=true;last=null;try{c.setPointerCapture(e.pointerId);}catch(_){}draw(e);},{signal:abort.signal});
+      c.addEventListener('pointermove',e=>{if(drawing&&!disposed&&e.pointerId===activePointer)draw(e);},{signal:abort.signal});
+      // Only the finger that started the stroke may end it; a second finger must not
+      // connect the two touch points with a streak of paste.
+      for(const name of ['pointerup','pointercancel','lostpointercapture'])c.addEventListener(name,e=>{if(e.pointerId!==activePointer)return;drawing=false;last=null;activePointer=null;},{signal:abort.signal});
+      click('#paste-reset',()=>{drawing=false;last=null;activePointer=null;cells.clear();strokes=spills=0;p.clearRect(0,0,400,320);render();update(0,false);status('新しい塗布面でやり直せます。');});render();
     }
     if(key==='gpu'){
       const thickness=[1,1.5,1,1.5,1,1.5];let selected=1;const placed=new Set();
