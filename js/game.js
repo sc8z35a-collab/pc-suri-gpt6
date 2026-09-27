@@ -168,7 +168,7 @@
   function purchaseMenu(key) {
     if (!own(CATALOG, key)) return showStore('all');
     const p = CATALOG[key];
-    setModal(p.name, 'PROCUREMENT / SELECT QUALITY', `<p class="modal-intro">所持金 <strong>${money(state().cash)}</strong>。配達に10分を消費します。どちらも確実に修理できます。</p><div class="quality-options">${[false,true].map(premium => `<div class="quality-option"><h4>${premium ? 'プレミアム' : 'スタンダード'}</h4><p>${premium ? '納品時 +¥2,000 / 評判 +0.04' : '標準品質 / 追加報酬なし'}<br>${p.description}</p><strong>${money(game.price(key,premium))}</strong><button class="primary-button" data-action="${premium ? 'buy-premium' : 'buy'}" data-key="${key}" ${state().cash < game.price(key,premium) ? 'disabled' : ''}>1個仕入れる</button></div>`).join('')}</div><p class="small-note">購入後は在庫に追加されます。自動で取り付けは行われません。<br>仕入れた部品は在庫メニューから購入相当額の60%で売却できます。</p><button class="secondary-button wide-button" data-action="store">ショップに戻る</button>`, 'purchase');
+    setModal(p.name, 'PROCUREMENT / SELECT QUALITY', `<p class="modal-intro">所持金 <strong>${money(state().cash)}</strong>。配達に10分を消費します。どちらも確実に修理できます。</p><div class="quality-options">${[false,true].map(premium => `<div class="quality-option"><h4>${premium ? 'プレミアム' : 'スタンダード'}</h4><p>${premium ? '納品時 +¥2,000 / 評判 +0.04' : '標準品質 / 追加報酬なし'}<br>${p.description}</p><strong>${money(game.price(key,premium))}</strong><button class="primary-button" data-action="${premium ? 'buy-premium' : 'buy'}" data-key="${key}" ${state().cash < game.price(key,premium) ? 'disabled' : ''}>1個仕入れる</button></div>`).join('')}</div><p class="small-note">購入後は在庫に追加されます。自動で取り付けは行われません。<br>仕入れた部品は在庫メニューから購入相当額の60%で売却できます。</p><button class="secondary-button wide-button" data-action="store-filter" data-key="${storeFilter}">ショップに戻る</button>${state().active?.panelOpen ? `<button class="secondary-button wide-button" data-action="repair-menu">修理画面に戻る ${icon('wrench')}</button>` : ''}`, 'purchase');
   }
   function showInventory() {
     const rows = []; [false,true].forEach(premium => Object.entries(premium ? state().premiumStock : state().inventory).forEach(([k,q]) => { if (q > 0 && CATALOG[k]) rows.push({k,q,premium}); }));
@@ -259,7 +259,7 @@
     'repair-menu': repairMenu, 'repair-select': key => { selected = key; repairMenu(); }, 'panel-then-repair': () => { if (state().active?.panelOpen) return repairMenu(); act(() => game.panel(), repairMenu); },
     repair: key => startPrecision(key),
     'repair-premium': key => startPrecision(key,true),
-    'store-item': key => showStore(key), 'store-filter': showStore, 'purchase-menu': purchaseMenu,
+    'store-item': key => own(CATALOG, key) ? purchaseMenu(key) : showStore('all'), 'store-filter': showStore, 'purchase-menu': purchaseMenu,
     buy: key => act(() => game.buy(key), () => { toast(`${CATALOG[key].name} が届きました。`); returnAfterPurchase(key); }),
     'buy-premium': key => act(() => game.buy(key,true), () => { toast('プレミアム部品が届きました。修理メニューから取り付けましょう。'); returnAfterPurchase(key); }),
     sell: key => act(() => game.sell(key), value => { showInventory(); toast(`${money(value)} で売却しました。`); }),
