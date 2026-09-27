@@ -58,8 +58,10 @@
   const game = new RepairGame(stored);
   let selected = 'cpu', modalType = '', busy = false, lastFocus = null, audioContext, specialistCleanup = null;
   const state = () => game.state;
+  let lastSound = 0;
   function sound(type = 'tap') {
     if (!state().settings.sound) return;
+    lastSound = performance.now();
     try {
       audioContext ||= new (window.AudioContext || window.webkitAudioContext)(); if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
       const osc = audioContext.createOscillator(), gain = audioContext.createGain();
@@ -277,7 +279,7 @@
     reset: () => { game.state = window.RepairCore.initialState(); selected = 'cpu'; precisionTask = null; storeFilter = 'all'; saveFailed = false; changed(); closeModal(); toast('新しい工房をオープンしました。'); window.dispatchEvent(new Event('rig-reset-view')); window.dispatchEvent(new CustomEvent('rig-select', { detail: 'cpu' })); }
   };
   document.addEventListener('click', e => {
-    const actionButton = e.target.closest('[data-action]'); if (actionButton && !actionButton.disabled && !busy) { sound(); const fn = own(actions, actionButton.dataset.action) ? actions[actionButton.dataset.action] : null; if (fn) fn(actionButton.dataset.key); return; }
+    const actionButton = e.target.closest('[data-action]'); if (actionButton && !actionButton.disabled && !busy) { const fn = own(actions, actionButton.dataset.action) ? actions[actionButton.dataset.action] : null; if (fn) { fn(actionButton.dataset.key); if (performance.now() - lastSound > 60) sound(); } return; }
     const part = e.target.closest('[data-part]'); if (part && !busy) { setSelected(part.dataset.part); return; }
     const nav = e.target.closest('[data-nav]'); if (nav && !busy) { const key = nav.dataset.nav; if (key === 'workbench') { closeModal(); $('workbench-panel').scrollIntoView({behavior:'smooth',block:'start'}); } else if (own(actions, key)) actions[key](); }
   });

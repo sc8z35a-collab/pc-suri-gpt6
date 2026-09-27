@@ -110,6 +110,7 @@
     }
     transaction(label, amount) {
       if (!Number.isFinite(amount)) throw new Error('金額が不正です。');
+      label = String(label ?? '');
       amount = Math.round(amount);
       if (this.state.cash + amount < 0) throw new Error('所持金が足りません。経営メニューで融資を受けられます。');
       const totals = this.dailyTotals;
